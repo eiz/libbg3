@@ -4,5 +4,3 @@
 
 #define LIBBG3_IMPLEMENTATION
 #include "libbg3.h"
-
-

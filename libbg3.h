@@ -5,6 +5,12 @@
 #ifndef LIBBG3_H
 #define LIBBG3_H
 
+#ifdef LIBBG3_CLANGD
+#ifndef LIBBG3_IMPLEMENTATION
+#define LIBBG3_IMPLEMENTATION
+#endif
+#endif
+
 #include <assert.h>
 #include <inttypes.h>
 #include <stdarg.h>
@@ -1481,7 +1487,7 @@ bg3_status aigrid_file_write(aigrid_file* file, char const* path);
 // osiris
 #define OSIRIS_VERSION_MAJOR 1
 #define OSIRIS_VERSION_MINOR 13
-#define OSIRIS_STRING_MASK 0xAD
+#define OSIRIS_STRING_MASK   0xAD
 
 typedef enum osiris_prim_type {
   osiris_prim_type_undef = 0,
@@ -1661,7 +1667,8 @@ typedef struct osiris_rete_node_parent {
   osiris_rete_node_edge db_edge;
   // number of edges between this node and the nearest db-having node (the
   // "token generator"). The distance is a bit quirky:
-  //   - for a left distance, if no db is in the path to the root, the value is 0
+  //   - for a left distance, if no db is in the path to the root, the value is
+  //   0
   //   - for a right distance, it's -1 in that case
   //   - when following a left chain, it's the shortest distance considering
   //     the right parents of the left parent chain as well.
@@ -3678,10 +3685,12 @@ void patch_file_destroy(patch_file* file) {
 }
 
 bg3_status patch_file_dump(patch_file* file) {
-  printf("patch version %d, local (%dx%d) tex (%d,%d) global (%dx%d) chunk (%x,%x)\n",
-         file->header.version, file->metadata.local_cols, file->metadata.local_rows,
-         file->metadata.tex_cols, file->metadata.tex_rows, file->metadata.global_cols,
-         file->metadata.global_rows, file->metadata.chunk_x, file->metadata.chunk_y);
+  printf(
+      "patch version %d, local (%dx%d) tex (%d,%d) global (%dx%d) chunk "
+      "(%x,%x)\n",
+      file->header.version, file->metadata.local_cols, file->metadata.local_rows,
+      file->metadata.tex_cols, file->metadata.tex_rows, file->metadata.global_cols,
+      file->metadata.global_rows, file->metadata.chunk_x, file->metadata.chunk_y);
   for (int i = 0; i < 2; ++i) {
     printf("key %d bounds %d %d %d %d\n", i, file->metadata.key_bounds[i].x0,
            file->metadata.key_bounds[i].x1, file->metadata.key_bounds[i].y0,
@@ -5302,7 +5311,8 @@ static void osiris_save_get_value(osiris_save* save, buffer* tmp, osiris_variant
     while (value_type->alias_index) {
       value_type = &save->type_infos[value_type->alias_index - 1];
     }
-    *out = (osiris_variant){.type = value_type->index, .index = type_idx};
+    *out =
+        (osiris_variant){.type = (osiris_prim_type)value_type->index, .index = type_idx};
     switch (value_type->index) {
       case osiris_prim_type_integer:
         osiris_save_get_u32(save, (uint32_t*)&out->integer);
@@ -5363,7 +5373,8 @@ static void osiris_save_get_action_list(osiris_save* save,
                                         uint32_t* num_actions,
                                         osiris_action** actions) {
   cursor_read(&save->c, num_actions, sizeof(uint32_t));
-  *actions = arena_calloc(&save->alloc, *num_actions, sizeof(osiris_action));
+  *actions =
+      (osiris_action*)arena_calloc(&save->alloc, *num_actions, sizeof(osiris_action));
   for (uint32_t j = 0; j < *num_actions; ++j) {
     osiris_action* a = *actions + j;
     osiris_save_get_string(save, tmp);
@@ -5373,8 +5384,8 @@ static void osiris_save_get_action_list(osiris_save* save,
       osiris_save_get_u8(save, &has_arguments);
       if (has_arguments) {
         osiris_save_get_u8(save, &a->num_arguments);
-        a->arguments =
-            arena_calloc(&save->alloc, a->num_arguments, sizeof(osiris_binding));
+        a->arguments = (osiris_binding*)arena_calloc(&save->alloc, a->num_arguments,
+                                                     sizeof(osiris_binding));
         for (uint8_t k = 0; k < a->num_arguments; ++k) {
           osiris_binding* b = a->arguments + k;
           osiris_save_get_binding(save, tmp, b);
@@ -5389,7 +5400,7 @@ static void osiris_save_get_action_list(osiris_save* save,
 static void osiris_save_get_rete_node_edge(osiris_save* save,
                                            osiris_rete_node_edge* edge) {
   osiris_save_get_u32(save, &edge->node_id);
-  osiris_save_get_u32(save, &edge->direction);
+  osiris_save_get_u32(save, (uint32_t*)&edge->direction);
   osiris_save_get_u32(save, &edge->goal_id);
 }
 
@@ -5440,8 +5451,8 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
   cursor_read(&save->c, &save->debug_flags, sizeof(uint32_t));
   cursor_read(&save->c, &save->num_type_infos, sizeof(uint32_t));
   save->string_mask = OSIRIS_STRING_MASK;  // i wonder if some middlebox caused this
-  osiris_type_info* type_infos =
-      arena_calloc(&save->alloc, save->num_type_infos, sizeof(osiris_type_info));
+  osiris_type_info* type_infos = (osiris_type_info*)arena_calloc(
+      &save->alloc, save->num_type_infos, sizeof(osiris_type_info));
   for (uint32_t i = 0; i < save->num_type_infos; ++i) {
     osiris_save_get_string(save, &tmp);
     type_infos[i].name = arena_strdup(&save->alloc, tmp.data);
@@ -5452,13 +5463,13 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
         osiris_type_info_compare);
   save->type_infos = type_infos;
   cursor_read(&save->c, &save->num_enums, sizeof(uint32_t));
-  osiris_enum_info* enums =
-      arena_calloc(&save->alloc, save->num_enums, sizeof(osiris_enum_info));
+  osiris_enum_info* enums = (osiris_enum_info*)arena_calloc(&save->alloc, save->num_enums,
+                                                            sizeof(osiris_enum_info));
   for (uint32_t i = 0; i < save->num_enums; ++i) {
     cursor_read(&save->c, &enums[i].index, sizeof(uint16_t));
     cursor_read(&save->c, &enums[i].num_entries, sizeof(uint32_t));
-    enums[i].entries =
-        arena_calloc(&save->alloc, enums[i].num_entries, sizeof(osiris_enum_entry));
+    enums[i].entries = (osiris_enum_entry*)arena_calloc(
+        &save->alloc, enums[i].num_entries, sizeof(osiris_enum_entry));
     for (uint32_t j = 0; j < enums[i].num_entries; ++j) {
       osiris_save_get_string(save, &tmp);
       enums[i].entries[j].name = arena_strdup(&save->alloc, tmp.data);
@@ -5475,15 +5486,15 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     bg3_panic("DIV object section is not supported");
   }
   cursor_read(&save->c, &save->num_functions, sizeof(uint32_t));
-  save->functions =
-      arena_calloc(&save->alloc, save->num_functions, sizeof(osiris_function_info));
+  save->functions = (osiris_function_info*)arena_calloc(&save->alloc, save->num_functions,
+                                                        sizeof(osiris_function_info));
   for (uint32_t i = 0; i < save->num_functions; ++i) {
     osiris_function_info* fn = &save->functions[i];
     osiris_save_get_u32(save, &fn->line);
     osiris_save_get_u32(save, &fn->num_conds);
     osiris_save_get_u32(save, &fn->num_actions);
     osiris_save_get_u32(save, &fn->rete_node);
-    osiris_save_get_u8(save, &fn->type);
+    osiris_save_get_u8(save, (uint8_t*)&fn->type);
     osiris_save_get_u32(save, &fn->sys_opcode);
     osiris_save_get_u32(save, &fn->unused0);
     osiris_save_get_u32(save, &fn->div_opcode);
@@ -5499,20 +5510,21 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     cursor_read(&save->c, &fn->out_mask, out_mask_len);
     cursor_read(&save->c, &fn->num_params, 1);
     if (fn->num_params) {
-      fn->params = arena_calloc(&save->alloc, fn->num_params, sizeof(osiris_type_info*));
+      fn->params =
+          (uint16_t*)arena_calloc(&save->alloc, fn->num_params, sizeof(uint16_t));
       for (uint32_t j = 0; j < fn->num_params; ++j) {
         osiris_save_get_u16(save, fn->params + j);
       }
     }
   }
   cursor_read(&save->c, &save->num_rete_nodes, sizeof(uint32_t));
-  save->rete_nodes =
-      arena_calloc(&save->alloc, save->num_rete_nodes, sizeof(osiris_rete_node));
+  save->rete_nodes = (osiris_rete_node*)arena_calloc(&save->alloc, save->num_rete_nodes,
+                                                     sizeof(osiris_rete_node));
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
     osiris_rete_node* n = &save->rete_nodes[i];
     uint8_t node_type;
     cursor_read(&save->c, &node_type, sizeof(uint8_t));
-    n->type = node_type;
+    n->type = (osiris_rete_node_type)node_type;
     cursor_read(&save->c, &n->node_id, sizeof(uint32_t));
     cursor_read(&save->c, &n->db, sizeof(uint32_t));
     osiris_save_get_string(save, &tmp);
@@ -5524,8 +5536,8 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
       case osiris_rete_node_db:
       case osiris_rete_node_event: {
         cursor_read(&save->c, &n->trigger.num_children, sizeof(uint32_t));
-        n->trigger.children = arena_calloc(&save->alloc, n->trigger.num_children,
-                                           sizeof(osiris_rete_node_edge));
+        n->trigger.children = (osiris_rete_node_edge*)arena_calloc(
+            &save->alloc, n->trigger.num_children, sizeof(osiris_rete_node_edge));
         for (uint32_t j = 0; j < n->trigger.num_children; ++j) {
           osiris_save_get_rete_node_edge(save, &n->trigger.children[j]);
         }
@@ -5566,8 +5578,8 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
                                     &n->terminal.actions);
         cursor_read(&save->c, &n->terminal.num_vars, 1);
         if (n->terminal.num_vars) {
-          n->terminal.vars =
-              arena_calloc(&save->alloc, n->terminal.num_vars, sizeof(osiris_binding));
+          n->terminal.vars = (osiris_binding*)arena_calloc(
+              &save->alloc, n->terminal.num_vars, sizeof(osiris_binding));
           for (uint8_t j = 0; j < n->terminal.num_vars; ++j) {
             osiris_binding* p = n->terminal.vars + j;
             cursor_read(&save->c, &p->is_variable, 1);
@@ -5587,15 +5599,15 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     }
   }
   cursor_read(&save->c, &save->num_rete_adaptors, sizeof(uint32_t));
-  save->rete_adaptors =
-      arena_calloc(&save->alloc, save->num_rete_adaptors, sizeof(osiris_rete_adaptor));
+  save->rete_adaptors = (osiris_rete_adaptor*)arena_calloc(
+      &save->alloc, save->num_rete_adaptors, sizeof(osiris_rete_adaptor));
   for (uint32_t i = 0; i < save->num_rete_adaptors; ++i) {
     osiris_rete_adaptor* a = save->rete_adaptors + i;
     osiris_save_get_u32(save, &a->adaptor_id);
     osiris_save_get_u8(save, &a->num_values);
     if (a->num_values) {
-      a->values =
-          arena_calloc(&save->alloc, a->num_values, sizeof(osiris_rete_adaptor_value));
+      a->values = (osiris_rete_adaptor_value*)arena_calloc(
+          &save->alloc, a->num_values, sizeof(osiris_rete_adaptor_value));
       for (uint8_t j = 0; j < a->num_values; ++j) {
         osiris_rete_adaptor_value* av = a->values + j;
         osiris_save_get_u8(save, &av->index);
@@ -5604,30 +5616,31 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     }
     osiris_save_get_u8(save, &a->num_vars);
     if (a->num_vars) {
-      a->vars = arena_calloc(&save->alloc, a->num_vars, sizeof(uint8_t));
+      a->vars = (uint8_t*)arena_calloc(&save->alloc, a->num_vars, sizeof(uint8_t));
       cursor_read(&save->c, a->vars, a->num_vars);
     }
     osiris_save_get_u8(save, &a->num_pairs);
     if (a->num_pairs) {
-      a->pairs =
-          arena_calloc(&save->alloc, a->num_pairs, sizeof(osiris_rete_adaptor_pair));
+      a->pairs = (osiris_rete_adaptor_pair*)arena_calloc(
+          &save->alloc, a->num_pairs, sizeof(osiris_rete_adaptor_pair));
       cursor_read(&save->c, a->pairs, sizeof(uint8_t) * 2 * a->num_pairs);
     }
   }
   cursor_read(&save->c, &save->num_dbs, sizeof(uint32_t));
-  save->dbs = arena_calloc(&save->alloc, save->num_dbs, sizeof(osiris_rete_db));
+  save->dbs =
+      (osiris_rete_db*)arena_calloc(&save->alloc, save->num_dbs, sizeof(osiris_rete_db));
   for (uint32_t i = 0; i < save->num_dbs; ++i) {
     osiris_rete_db* d = save->dbs + i;
     osiris_save_get_u32(save, &d->db_id);
     osiris_save_get_u8(save, &d->num_schema_columns);
     d->schema_columns =
-        arena_calloc(&save->alloc, d->num_schema_columns, sizeof(uint16_t));
+        (uint16_t*)arena_calloc(&save->alloc, d->num_schema_columns, sizeof(uint16_t));
     for (uint8_t j = 0; j < d->num_schema_columns; ++j) {
       osiris_save_get_u16(save, d->schema_columns + j);
     }
     osiris_save_get_u32(save, &d->num_rows);
     if (d->num_rows) {
-      d->rows = arena_calloc(&save->alloc, d->num_rows, sizeof(osiris_row));
+      d->rows = (osiris_row*)arena_calloc(&save->alloc, d->num_rows, sizeof(osiris_row));
       for (uint32_t j = 0; j < d->num_rows; ++j) {
         osiris_row* r = d->rows + j;
         uint8_t num_columns;
@@ -5635,7 +5648,8 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
         if (num_columns != d->num_schema_columns) {
           osiris_save_debug(save);
         }
-        r->columns = arena_calloc(&save->alloc, num_columns, sizeof(osiris_variant));
+        r->columns = (osiris_variant*)arena_calloc(&save->alloc, num_columns,
+                                                   sizeof(osiris_variant));
         for (uint8_t k = 0; k < num_columns; ++k) {
           osiris_save_get_value(save, &tmp, r->columns + k);
         }
@@ -5643,13 +5657,14 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     }
   }
   cursor_read(&save->c, &save->num_goals, 4);
-  save->goals = arena_calloc(&save->alloc, save->num_goals, sizeof(osiris_goal));
+  save->goals =
+      (osiris_goal*)arena_calloc(&save->alloc, save->num_goals, sizeof(osiris_goal));
   for (uint32_t i = 0; i < save->num_goals; ++i) {
     osiris_goal* g = save->goals + i;
     osiris_save_get_u32(save, &g->goal_id);
     osiris_save_get_string(save, &tmp);
     g->name = arena_strdup(&save->alloc, tmp.data);
-    osiris_save_get_u8(save, &g->combiner);
+    osiris_save_get_u8(save, (uint8_t*)&g->combiner);
     uint32_t num_parents;
     osiris_save_get_u32(save, &num_parents);
     // there can be only one. why the format allows multiple is a complete
@@ -5667,12 +5682,13 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     }
     osiris_save_get_u32(save, &g->num_children);
     if (g->num_children) {
-      g->children = arena_calloc(&save->alloc, g->num_children, sizeof(uint32_t));
+      g->children =
+          (uint32_t*)arena_calloc(&save->alloc, g->num_children, sizeof(uint32_t));
       for (uint32_t j = 0; j < g->num_children; ++j) {
         osiris_save_get_u32(save, g->children + j);
       }
     }
-    osiris_save_get_u8(save, &g->state);
+    osiris_save_get_u8(save, (uint8_t*)&g->state);
     osiris_save_get_action_list(save, &tmp, &g->num_init_actions, &g->init_actions);
     osiris_save_get_action_list(save, &tmp, &g->num_exit_actions, &g->exit_actions);
   }
@@ -6131,15 +6147,17 @@ static osiris_node_bindings* osiris_node_bindings_table_get(
   }
   hash_entry* e = hash_get_entry(&table->nodes, node);
   if (e) {
-    return e->value;
+    return (osiris_node_bindings*)e->value;
   }
-  osiris_node_bindings* new_bindings = calloc(1, sizeof(osiris_node_bindings));
+  osiris_node_bindings* new_bindings =
+      (osiris_node_bindings*)calloc(1, sizeof(osiris_node_bindings));
   new_bindings->arity = get_node_arity(table->save, node);
-  new_bindings->entries =
-      malloc(sizeof(osiris_node_binding_entry*) * new_bindings->arity);
+  new_bindings->entries = (osiris_node_binding_entry**)malloc(
+      sizeof(osiris_node_binding_entry*) * new_bindings->arity);
   for (size_t i = 0; i < new_bindings->arity; ++i) {
     char buf[128];
-    osiris_node_binding_entry* entry = calloc(1, sizeof(osiris_node_binding_entry));
+    osiris_node_binding_entry* entry =
+        (osiris_node_binding_entry*)calloc(1, sizeof(osiris_node_binding_entry));
     entry->refcount = 1;
     snprintf(buf, sizeof(buf), "Var%d", table->next_id++);
     entry->name = strdup(buf);
@@ -6315,7 +6333,7 @@ static void osiris_save_put_sexp_action_list(osiris_save* save,
 }
 
 static void osiris_save_collect_goal_nodes(osiris_save* save, buffer* node_lists) {
-  int32_t* node_owners = malloc(sizeof(int32_t) * save->num_rete_nodes);
+  int32_t* node_owners = (int32_t*)malloc(sizeof(int32_t) * save->num_rete_nodes);
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
     node_owners[i] = -1;
   }
@@ -6581,7 +6599,7 @@ bg3_status osiris_save_write_sexp(osiris_save* save, char const* path, bool verb
   if (!fp) {
     return bg3_error_failed;
   }
-  buffer* node_lists = calloc(save->num_goals, sizeof(buffer));
+  buffer* node_lists = (buffer*)calloc(save->num_goals, sizeof(buffer));
   osiris_save_collect_goal_nodes(save, node_lists);
   ibuf_clear(&save->text_out);
   ibuf_printf(&save->text_out, "(defstory \"%s\" \"%s\" %d %d %d)\n", save->version,
@@ -6751,8 +6769,8 @@ bg3_status osiris_save_write_sexp(osiris_save* save, char const* path, bool verb
 }
 
 static uint64_t symtab_hash_fn(void* key, void* user_data) {
-  size_t len = MIN(strlen(key), 64);
-  char* buf = alloca(len);
+  size_t len = MIN(strlen((char*)key), 64);
+  char* buf = (char*)alloca(len);
   for (size_t i = 0; i < len; ++i) {
     buf[i] = tolower(((char*)key)[i]);
   }
@@ -6760,11 +6778,11 @@ static uint64_t symtab_hash_fn(void* key, void* user_data) {
 }
 
 static bool symtab_equal_fn(void* lhs, void* rhs, void* user_data) {
-  return !strcasecmp(lhs, rhs);
+  return !strcasecmp((char const*)lhs, (char const*)rhs);
 }
 
 static void* symtab_copy_fn(void* value, void* user_data) {
-  return arena_strdup(user_data, value);
+  return arena_strdup((arena*)user_data, (char const*)value);
 }
 
 static void symtab_free_fn(void* value, void* user_data) {
@@ -6782,12 +6800,12 @@ const hash_ops symtab_hash_ops = {
 };
 
 static uint64_t symtab_case_hash_fn(void* key, void* user_data) {
-  size_t len = MIN(strlen(key), 64);
+  size_t len = MIN(strlen((char const*)key), 64);
   return XXH64(key, len, 0);
 }
 
 static bool symtab_case_equal_fn(void* lhs, void* rhs, void* user_data) {
-  return !strcmp(lhs, rhs);
+  return !strcmp((char const*)lhs, (char const*)rhs);
 }
 
 // TODO move this
@@ -7261,7 +7279,8 @@ static bg3_status infer_and_check_types(osiris_save_builder* builder,
     // A variable or don't-care we haven't seen yet, assign its type.
     b->value.index = ti->index;
     if (b->is_variable) {
-      b->value.type = ti->enum_index ? osiris_prim_type_enum : resolved->index;
+      b->value.type =
+          (osiris_prim_type)(ti->enum_index ? osiris_prim_type_enum : resolved->index);
       // write back changes to variables to propagate forward
       builder->current_vars[b->index] = *b;
     }
@@ -7341,89 +7360,6 @@ static bg3_status parse_action_list(osiris_save_builder* builder,
   return status;
 }
 
-// ok lets think through how to do this
-// we're going to take a rule like
-// (rule ((ThingA Var1 0 Var2)
-//        (ThingB Var2 Var3))
-//   (DoStuff Var1 Var3))
-//
-// from this we're going to create 4 nodes
-// DB node: ThingA/3
-// DB node: ThingB/2
-// AND node: arity 3 temp db
-// terminal node: 3 vars
-//
-// we want to do this in a single pass through the condition list without
-// building some intermediate representation of the syntax tree
-//
-// Q: can we calculate the total number of nodes from the number
-// of conditions N
-//
-// I think it's 2 + 2 * (N - 1)? not counting compare nodes
-// 1 for the trigger condition
-// 1 for the terminal
-// then 1 join and 1 right parent for each N>1
-// obviously also not counting the fact that entry nodes are
-// deduplicated
-//
-// var bindings are always used in the _next_ condition down (or in the
-// terminal node) from where they are actually written lexically, when we
-// create adapters.
-//
-// so I think we proceed in a 2 phase approach. for now lets call those phases
-// 1. parse_condition:
-//    parse a condition, returning:
-//      - the predicate or comparison operator used
-//      - the variable bindings (with types), which may be grounded for
-//        constants
-//      - if the predicate does not yet have a corresponding rete node and db
-//        (for db conditions), create them and store the reference on the
-//        function_info
-//    at this stage, new variable bindings are introduced as needed. new
-//    ungrounded vars are only allowed for non-comparison conditions (I
-//    think?).  we assign them increasing indices local to the rule and store
-//    in current_vars.
-// 2. consume_outputs:
-//    at this point there are 1 or more nodes whose output has not been
-//    consumed in this production rule. depending on the state, we will create
-//    one of the 3 categories of non-entry node, or skip this phase if no node
-//    can be constructed yet.
-//
-//    cases:
-//     1. we are in the initial state. create DB/event node, assign the
-//        condition as 'left parent' and return.
-//     2. we have a left parent and a DB condition. create an AND or AND NOT
-//        join with a temp db. TODO think through tracking the nearest-parent
-//        dbs which we will need.
-//     3. we have a left parent and a query condition. ditto but no temp.
-//     4. we have a left parent and a relational operator. create a compare
-//        node
-//     5. we have a left parent and no new condition. create the terminal node
-//
-//    when creating a new node, we use the current left parent and let the
-//    right parent be the new condition's db/query node, if present. for each
-//    parent we need to create an adaptor. at this point we've got 1 or 2 lists
-//    of binding objects corresponding to the left and right parents'
-//    arguments, with indices that were copied from builder->current_vars for
-//    ungrounded vars
-//
-//    I _think_ we might not actually need to do any really fancy swizzling at
-//    all? When creating the adaptor, simply map the array index inside the
-//    left or right binding list onto the rule-wide stable index order in the
-//    main current_vars list and insert constants for any unbound fields? I
-//    think this should work given that the node graph is always a left-parent
-//    chain with a 0 or 1 length right parent spur at any given node
-//
-//    Then simply mark the correct vars as live when they are consumed in the
-//    action list.
-//
-//    When creating nodes, the child pointers in the parent nodes must be
-//    updated as well. Either by inserting into the child list for entry nodes
-//    or setting the left-side child pointer in interior nodes.
-//
-//    representation of parents... the right parent is always an entry node but
-//    the left parent may be an interior node. do we keep a condition struct
-//    representing those interiors?
 typedef enum condition_type {
   condition_empty,
   condition_trigger,
@@ -7457,7 +7393,7 @@ static bg3_status parse_condition(osiris_save_builder* builder,
   if (!lookup_global(builder, l->next.text.data, &symval) &&
       SYMBOL_TYPE_OF(symval) == symtype_compare) {
     cond->type = condition_compare;
-    cond->compare_op = SYMBOL_INDEX_OF(symval);
+    cond->compare_op = (osiris_compare_op)SYMBOL_INDEX_OF(symval);
   } else {
     if (!strcmp(l->next.text.data, "not")) {
       SLURP(symbol);
@@ -7502,7 +7438,7 @@ static bg3_status parse_condition(osiris_save_builder* builder,
   return status;
 }
 
-static bg3_status is_valid_trigger(osiris_function_info* fn) {
+static bool is_valid_trigger(osiris_function_info* fn) {
   return fn->type == osiris_function_event || fn->type == osiris_function_db ||
          fn->type == osiris_function_proc || fn->type == osiris_function_query;
 }
@@ -7521,7 +7457,8 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
     case osiris_function_div_query:
       if (is_left_root) {
         fprintf(stderr,
-                "DIV queries may not occur as the first condition of a rule at line %d\n",
+                "DIV queries may not occur as the first condition of a rule at "
+                "line %d\n",
                 cond->line);
         return bg3_error_failed;
       }
@@ -7547,7 +7484,8 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
     case osiris_function_sys_query:
       if (is_left_root) {
         fprintf(stderr,
-                "Osiris internal queries may not occur as the first condition of a rule "
+                "Osiris internal queries may not occur as the first condition of "
+                "a rule "
                 "at line %d\n",
                 cond->line);
         return bg3_error_failed;
@@ -7556,7 +7494,8 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
       break;
     case osiris_function_sys_call:
       fprintf(stderr,
-              "Osiris internal calls may only occur in the action list of a rule at line "
+              "Osiris internal calls may only occur in the action list of a rule "
+              "at line "
               "%d\n",
               cond->line);
       return bg3_error_failed;
@@ -7579,7 +7518,7 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
       db.db_id = node.db;
       db.num_schema_columns = cond->predicate->num_params;
       size_t sz = db.num_schema_columns * sizeof(uint16_t);
-      db.schema_columns = arena_alloc(&builder->save.alloc, sz);
+      db.schema_columns = (uint16_t*)arena_alloc(&builder->save.alloc, sz);
       memcpy(db.schema_columns, cond->predicate->params, sz);
       array_push(&builder->save.alloc, &builder->save, dbs, db);
     }
@@ -7597,7 +7536,7 @@ static uint32_t create_adaptor(osiris_save_builder* builder,
   osiris_rete_adaptor adaptor = {
       .adaptor_id = builder->save.num_rete_adaptors + 1,
       .num_vars = parent->num_bindings,
-      .vars = arena_alloc(&builder->save.alloc, parent->num_bindings),
+      .vars = (uint8_t*)arena_alloc(&builder->save.alloc, parent->num_bindings),
   };
   for (uint32_t i = 0; i < parent->num_bindings; ++i) {
     osiris_binding* b = parent->bindings + i;
@@ -7615,10 +7554,10 @@ static uint32_t create_adaptor(osiris_save_builder* builder,
       output->debug_copied_down[b->index] = true;
     }
   }
-  adaptor.values = arena_calloc(&builder->save.alloc, adaptor.num_values,
-                                sizeof(osiris_rete_adaptor_value));
-  adaptor.pairs = arena_calloc(&builder->save.alloc, adaptor.num_pairs,
-                               sizeof(osiris_rete_adaptor_pair));
+  adaptor.values = (osiris_rete_adaptor_value*)arena_calloc(
+      &builder->save.alloc, adaptor.num_values, sizeof(osiris_rete_adaptor_value));
+  adaptor.pairs = (osiris_rete_adaptor_pair*)arena_calloc(
+      &builder->save.alloc, adaptor.num_pairs, sizeof(osiris_rete_adaptor_pair));
   uint32_t next_value = 0;
   uint32_t next_pair = 0;
   for (uint32_t i = 0; i < parent->num_bindings; ++i) {
@@ -7678,7 +7617,7 @@ static void create_temp_db(osiris_save_builder* builder,
   db.db_id = node->db;
   db.num_schema_columns = cond->num_bindings;
   size_t sz = db.num_schema_columns * sizeof(uint16_t);
-  db.schema_columns = arena_alloc(&builder->save.alloc, sz);
+  db.schema_columns = (uint16_t*)arena_alloc(&builder->save.alloc, sz);
   for (uint32_t i = 0; i < cond->num_bindings; ++i) {
     assert(cond->bindings[i].value.index != 0);
     db.schema_columns[i] = cond->bindings[i].value.index;
@@ -7812,7 +7751,7 @@ static bg3_status create_terminal_node(osiris_save_builder* builder,
   link_parent(builder, last, &node, osiris_edge_direction_none);
   node.terminal.num_vars = builder->next_var;
   size_t sz = sizeof(osiris_binding) * builder->next_var;
-  node.terminal.vars = arena_alloc(&builder->save.alloc, sz);
+  node.terminal.vars = (osiris_binding*)arena_alloc(&builder->save.alloc, sz);
   memcpy(node.terminal.vars, builder->current_vars, sz);
   memcpy(terminal_cond.bindings, builder->current_vars, sz);
   osiris_rete_node* parent = builder->save.rete_nodes + (last->node_id - 1);
@@ -7920,10 +7859,10 @@ static bg3_status consume_outputs(osiris_save_builder* builder,
       return bg3_error_failed;
     }
     if (next->type != condition_trigger || !is_valid_trigger(next->predicate)) {
-      fprintf(
-          stderr,
-          "first condition of a rule must be an event, db, proc or query at line %d\n",
-          next->line);
+      fprintf(stderr,
+              "first condition of a rule must be an event, db, proc or query "
+              "at line %d\n",
+              next->line);
       return bg3_error_failed;
     }
     if ((status = ensure_entry_node(builder, next, prev->type == condition_empty))) {
@@ -7992,8 +7931,9 @@ static bg3_status parse_goal(osiris_save_builder* builder, sexp_lexer* l) {
   } else if (!strcmp(l->next.text.data, "sleeping")) {
     goal.state = osiris_goal_state_sleeping;
   } else if (!strcmp(l->next.text.data, "exited")) {
-    goal.state = osiris_goal_state_sleeping | osiris_goal_state_finalised |
-                 osiris_goal_state_completed;
+    goal.state =
+        (osiris_goal_state)(osiris_goal_state_sleeping | osiris_goal_state_finalised |
+                            osiris_goal_state_completed);
   } else {
     fprintf(stderr, "invalid goal state '%s' at line %d\n", l->next.text.data,
             l->next.line);
@@ -8191,7 +8131,7 @@ bg3_status osiris_save_builder_finish(osiris_save_builder* builder) {
       db.db_id = node.db;
       db.num_schema_columns = fi->num_params;
       size_t sz = db.num_schema_columns * sizeof(uint16_t);
-      db.schema_columns = arena_alloc(&builder->save.alloc, sz);
+      db.schema_columns = (uint16_t*)arena_alloc(&builder->save.alloc, sz);
       memcpy(db.schema_columns, fi->params, sz);
       array_push(&builder->save.alloc, &builder->save, dbs, db);
       array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
@@ -8215,5 +8155,5 @@ bg3_status osiris_save_builder_finish(osiris_save_builder* builder) {
   }
   return bg3_success;
 }
-#endif // LIBBG3_IMPLEMENTATION
-#endif // LIBBG3_H
+#endif  // LIBBG3_IMPLEMENTATION
+#endif  // LIBBG3_H
