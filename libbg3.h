@@ -1573,7 +1573,7 @@ typedef enum osiris_goal_combiner : uint8_t {
 } osiris_goal_combiner;
 
 typedef struct osiris_type_info {
-  char* name;
+  char const* name;
   uint8_t index;
   uint8_t alias_index;
   uint8_t enum_index;
@@ -5717,7 +5717,7 @@ static inline void osiris_save_put_u64(osiris_save* save, uint64_t val) {
   buffer_push(&save->out, &val, sizeof(uint64_t));
 }
 
-static inline void osiris_save_put_string(osiris_save* save, char* str) {
+static inline void osiris_save_put_string(osiris_save* save, char const* str) {
   if (str) {
     while (*str) {
       buffer_putchar(&save->out, ((uint8_t)*str) ^ save->string_mask);
@@ -6831,12 +6831,14 @@ typedef enum reserved_symbol {
   symbol_goal_completed,
 } reserved_symbol;
 
-static bg3_status enter_global(osiris_save_builder* builder, char* name, void* symval) {
-  hash_entry* entry = hash_get_entry(&builder->global_symbols, name);
+static bg3_status enter_global(osiris_save_builder* builder,
+                               char const* name,
+                               void* symval) {
+  hash_entry* entry = hash_get_entry(&builder->global_symbols, (void*)name);
   if (entry) {
     return bg3_error_failed;
   }
-  hash_set(&builder->global_symbols, name, symval);
+  hash_set(&builder->global_symbols, (void*)name, symval);
   return bg3_success;
 }
 
@@ -6890,7 +6892,7 @@ static osiris_function_info* lookup_function(osiris_save_builder* builder, char*
 }
 
 static bg3_status enter_type_info(osiris_save_builder* builder,
-                                  char* name,
+                                  char const* name,
                                   osiris_type_info* ti) {
   size_t new_index = builder->save.num_type_infos + 1;
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_type, new_index))) {
@@ -7215,7 +7217,7 @@ static bg3_status parse_argument(osiris_save_builder* builder,
   return status;
 }
 
-static char* get_type_name(osiris_save_builder* builder, uint16_t index) {
+static char const* get_type_name(osiris_save_builder* builder, uint16_t index) {
   if (!index) {
     return "undef";
   }
