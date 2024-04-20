@@ -119,8 +119,8 @@ int bg3_parallel_for_n(bg3_parallel_for_cb* callback, void* user_data, int nthre
 // threads
 void bg3_sync_threads(bg3_parallel_for_thread* tcb);
 
-#define HASH_EMPTY_VALUE     ((void*)-1)
-#define HASH_TOMBSTONE_VALUE ((void*)-2)
+#define LIBBG3_HASH_EMPTY_VALUE     ((void*)-1)
+#define LIBBG3_HASH_TOMBSTONE_VALUE ((void*)-2)
 
 typedef struct bg3_hash_ops {
   uint64_t (*hash_fn)(void* key, void* user_data);
@@ -138,10 +138,10 @@ extern const bg3_hash_ops default_hash_ops;
 // hash ops are useful for other things
 //
 // user_data must be a pointer to an arena. keys will be copied into the arena.
-#define MAKE_SYMBOL_VALUE(symtype, index) \
+#define LIBBG3_MAKE_SYMBOL_VALUE(symtype, index) \
   ((void*)((((size_t)symtype) << 24) | (size_t)(index)))
-#define SYMBOL_TYPE_OF(sym_value)  (((size_t)sym_value) >> 24)
-#define SYMBOL_INDEX_OF(sym_value) (((size_t)sym_value) & 0xFFFFFF)
+#define LIBBG3_SYMBOL_TYPE_OF(sym_value)  (((size_t)sym_value) >> 24)
+#define LIBBG3_SYMBOL_INDEX_OF(sym_value) (((size_t)sym_value) & 0xFFFFFF)
 extern const bg3_hash_ops symtab_hash_ops;
 extern const bg3_hash_ops symtab_case_hash_ops;
 
@@ -2206,7 +2206,7 @@ void bg3_hash_destroy(bg3_hash* table) {
 }
 
 bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** entry) {
-  if (key == HASH_EMPTY_VALUE || key == HASH_TOMBSTONE_VALUE) {
+  if (key == LIBBG3_HASH_EMPTY_VALUE || key == LIBBG3_HASH_TOMBSTONE_VALUE) {
     bg3_panic("attempt to set reserved hash key");
   }
   *entry = 0;
@@ -2216,7 +2216,7 @@ bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** 
     table->table_size = 8;
     table->entries = (bg3_hash_entry*)malloc(sizeof(bg3_hash_entry) * table->table_size);
     for (size_t i = 0; i < table->table_size; ++i) {
-      table->entries[i] = (bg3_hash_entry){.key = HASH_EMPTY_VALUE, .value = 0};
+      table->entries[i] = (bg3_hash_entry){.key = LIBBG3_HASH_EMPTY_VALUE, .value = 0};
     }
   }
   bool rehashed;
@@ -2229,7 +2229,7 @@ bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** 
     rehashed = false;
     do {
       bg3_hash_entry* e = table->entries + addr;
-      if (e->key == HASH_EMPTY_VALUE || e->key == HASH_TOMBSTONE_VALUE) {
+      if (e->key == LIBBG3_HASH_EMPTY_VALUE || e->key == LIBBG3_HASH_TOMBSTONE_VALUE) {
         found_new = true;
         break;
       } else if (table->ops->equal_fn(e->key, key, table->user_data)) {
@@ -2263,12 +2263,13 @@ bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** 
       bg3_hash_entry* new_entries =
           (bg3_hash_entry*)malloc(new_size * sizeof(bg3_hash_entry));
       for (size_t i = 0; i < new_size; ++i) {
-        new_entries[i] = (bg3_hash_entry){.key = HASH_EMPTY_VALUE, .value = 0};
+        new_entries[i] = (bg3_hash_entry){.key = LIBBG3_HASH_EMPTY_VALUE, .value = 0};
       }
       mask = new_size - 1;
       for (size_t i = 0; i < table->table_size; ++i) {
         bg3_hash_entry* old_e = table->entries + i;
-        if (old_e->key == HASH_EMPTY_VALUE || old_e->key == HASH_TOMBSTONE_VALUE) {
+        if (old_e->key == LIBBG3_HASH_EMPTY_VALUE ||
+            old_e->key == LIBBG3_HASH_TOMBSTONE_VALUE) {
           continue;
         }
         uint64_t rehash0 = table->ops->hash_fn(old_e->key, table->user_data) & ~1ULL;
@@ -2278,7 +2279,7 @@ bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** 
         bool found_slot = false;
         do {
           bg3_hash_entry* e = new_entries + addr;
-          if (e->key == HASH_EMPTY_VALUE) {
+          if (e->key == LIBBG3_HASH_EMPTY_VALUE) {
             found_slot = true;
             break;
           }
@@ -2305,7 +2306,7 @@ void bg3_hash_set(bg3_hash* table, void* key, void* value) {
 }
 
 bg3_hash_entry* bg3_hash_get_entry(bg3_hash* table, void* key) {
-  if (key == HASH_EMPTY_VALUE || key == HASH_TOMBSTONE_VALUE) {
+  if (key == LIBBG3_HASH_EMPTY_VALUE || key == LIBBG3_HASH_TOMBSTONE_VALUE) {
     bg3_panic("attempt to get reserved hash key");
   }
   if (!table->table_size) {
@@ -2317,9 +2318,9 @@ bg3_hash_entry* bg3_hash_get_entry(bg3_hash* table, void* key) {
   uint64_t addr = hash0 & mask, start_addr = addr;
   do {
     bg3_hash_entry* e = table->entries + addr;
-    if (e->key == HASH_EMPTY_VALUE) {
+    if (e->key == LIBBG3_HASH_EMPTY_VALUE) {
       return 0;
-    } else if (e->key == HASH_TOMBSTONE_VALUE) {
+    } else if (e->key == LIBBG3_HASH_TOMBSTONE_VALUE) {
       continue;
     } else if (table->ops->equal_fn(e->key, key, table->user_data)) {
       return e;
@@ -2334,7 +2335,7 @@ bool bg3_hash_delete(bg3_hash* table, void* key) {
   if (entry) {
     table->ops->free_key_fn(entry->key, table->user_data);
     table->ops->free_value_fn(entry->value, table->user_data);
-    entry->key = HASH_TOMBSTONE_VALUE;
+    entry->key = LIBBG3_HASH_TOMBSTONE_VALUE;
     entry->value = 0;
     table->num_keys--;
     return true;
@@ -2345,11 +2346,11 @@ bool bg3_hash_delete(bg3_hash* table, void* key) {
 void bg3_hash_clear(bg3_hash* table) {
   for (size_t i = 0; i < table->table_size; ++i) {
     bg3_hash_entry* e = table->entries + i;
-    if (e->key != HASH_EMPTY_VALUE && e->key != HASH_TOMBSTONE_VALUE) {
+    if (e->key != LIBBG3_HASH_EMPTY_VALUE && e->key != LIBBG3_HASH_TOMBSTONE_VALUE) {
       table->ops->free_key_fn(e->key, table->user_data);
       table->ops->free_value_fn(e->value, table->user_data);
     }
-    e->key = HASH_EMPTY_VALUE;
+    e->key = LIBBG3_HASH_EMPTY_VALUE;
     e->value = 0;
   }
   table->num_keys = 0;
@@ -4415,9 +4416,10 @@ static void index_symtab_destroy(index_symtab* symtab) {
 static int index_lookup_compare(void const* lhs, void const* rhs) {
   bg3_hash_entry const* left = (bg3_hash_entry const*)lhs;
   bg3_hash_entry const* right = (bg3_hash_entry const*)rhs;
-  bool is_left_dead = left->key == HASH_TOMBSTONE_VALUE || left->key == HASH_EMPTY_VALUE;
+  bool is_left_dead =
+      left->key == LIBBG3_HASH_TOMBSTONE_VALUE || left->key == LIBBG3_HASH_EMPTY_VALUE;
   bool is_right_dead =
-      right->key == HASH_TOMBSTONE_VALUE || right->key == HASH_EMPTY_VALUE;
+      right->key == LIBBG3_HASH_TOMBSTONE_VALUE || right->key == LIBBG3_HASH_EMPTY_VALUE;
   if (!is_left_dead && is_right_dead) {
     return -1;
   } else if (is_left_dead && !is_right_dead) {
@@ -4432,7 +4434,8 @@ static int index_lookup_compare(void const* lhs, void const* rhs) {
 #define UNPACK_SYMVAL(x) ((void*)(uintptr_t)(x))
 
 static index_symtab_entry* index_symtab_get_global(index_global* global, void* symval) {
-  return &global->threads[SYMBOL_TYPE_OF(symval)].symtab.entries[SYMBOL_INDEX_OF(symval)];
+  return &global->threads[LIBBG3_SYMBOL_TYPE_OF(symval)]
+              .symtab.entries[LIBBG3_SYMBOL_INDEX_OF(symval)];
 }
 
 static void index_symtab_link_symbols(index_global* global,
@@ -4467,7 +4470,7 @@ static void index_symtab_enter_string(index_symtab* symtab,
     }
   }
   assert(symtab->num_entries <= 0xFFFFFF);
-  void* symval = MAKE_SYMBOL_VALUE(thread_num, symtab->num_entries);
+  void* symval = LIBBG3_MAKE_SYMBOL_VALUE(thread_num, symtab->num_entries);
   index_symtab_entry entry = {
       .item_idx = (uint32_t)item_idx,
       .item_val = item_val,
@@ -6934,7 +6937,8 @@ static bg3_status enter_function(bg3_osiris_save_builder* builder,
                                  char* name,
                                  bg3_osiris_function_info* fn) {
   size_t new_index = builder->save.num_functions + 1;
-  if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_function, new_index))) {
+  if (enter_global(builder, name,
+                   LIBBG3_MAKE_SYMBOL_VALUE(symtype_function, new_index))) {
     return bg3_error_failed;
   }
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, functions, *fn);
@@ -6945,17 +6949,17 @@ static bg3_osiris_function_info* lookup_function(bg3_osiris_save_builder* builde
                                                  char* name) {
   void* symval;
   if (lookup_global(builder, name, &symval) ||
-      SYMBOL_TYPE_OF(symval) != symtype_function) {
+      LIBBG3_SYMBOL_TYPE_OF(symval) != symtype_function) {
     return 0;
   }
-  return builder->save.functions + (SYMBOL_INDEX_OF(symval) - 1);
+  return builder->save.functions + (LIBBG3_SYMBOL_INDEX_OF(symval) - 1);
 }
 
 static bg3_status enter_type_info(bg3_osiris_save_builder* builder,
                                   char const* name,
                                   bg3_osiris_type_info* ti) {
   size_t new_index = builder->save.num_type_infos + 1;
-  if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_type, new_index))) {
+  if (enter_global(builder, name, LIBBG3_MAKE_SYMBOL_VALUE(symtype_type, new_index))) {
     return bg3_error_failed;
   }
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, *ti);
@@ -6965,10 +6969,11 @@ static bg3_status enter_type_info(bg3_osiris_save_builder* builder,
 static bg3_osiris_type_info* lookup_type_info(bg3_osiris_save_builder* builder,
                                               char* name) {
   void* symval;
-  if (lookup_global(builder, name, &symval) || SYMBOL_TYPE_OF(symval) != symtype_type) {
+  if (lookup_global(builder, name, &symval) ||
+      LIBBG3_SYMBOL_TYPE_OF(symval) != symtype_type) {
     return 0;
   }
-  return builder->save.type_infos + (SYMBOL_INDEX_OF(symval) - 1);
+  return builder->save.type_infos + (LIBBG3_SYMBOL_INDEX_OF(symval) - 1);
 }
 
 static bg3_status enter_goal(bg3_osiris_save_builder* builder,
@@ -6976,7 +6981,7 @@ static bg3_status enter_goal(bg3_osiris_save_builder* builder,
                              bg3_osiris_goal* goal) {
   size_t new_index = builder->save.num_goals + 1;
   assert(goal->goal_id == new_index);
-  if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_goal, new_index))) {
+  if (enter_global(builder, name, LIBBG3_MAKE_SYMBOL_VALUE(symtype_goal, new_index))) {
     return bg3_error_failed;
   }
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, goals, *goal);
@@ -6985,16 +6990,18 @@ static bg3_status enter_goal(bg3_osiris_save_builder* builder,
 
 static bg3_osiris_goal* lookup_goal(bg3_osiris_save_builder* builder, char* name) {
   void* symval;
-  if (lookup_global(builder, name, &symval) || SYMBOL_TYPE_OF(symval) != symtype_goal) {
+  if (lookup_global(builder, name, &symval) ||
+      LIBBG3_SYMBOL_TYPE_OF(symval) != symtype_goal) {
     return 0;
   }
-  return builder->save.goals + (SYMBOL_INDEX_OF(symval) - 1);
+  return builder->save.goals + (LIBBG3_SYMBOL_INDEX_OF(symval) - 1);
 }
 
 static bg3_status enter_variable(bg3_osiris_save_builder* builder,
                                  char* name,
                                  uint32_t var_index) {
-  return enter_local(builder, name, MAKE_SYMBOL_VALUE(symtype_variable, var_index));
+  return enter_local(builder, name,
+                     LIBBG3_MAKE_SYMBOL_VALUE(symtype_variable, var_index));
 }
 
 void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder) {
@@ -7007,29 +7014,31 @@ void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder) {
   bg3_osiris_type_info builtin_real = {.name = "REAL", .index = 3};
   bg3_osiris_type_info builtin_string = {.name = "STRING", .index = 4};
   bg3_osiris_type_info builtin_guidstring = {.name = "GUIDSTRING", .index = 5};
-  enter_global(builder, "INTEGER", MAKE_SYMBOL_VALUE(symtype_type, 1));
-  enter_global(builder, "INTEGER64", MAKE_SYMBOL_VALUE(symtype_type, 2));
-  enter_global(builder, "REAL", MAKE_SYMBOL_VALUE(symtype_type, 3));
-  enter_global(builder, "STRING", MAKE_SYMBOL_VALUE(symtype_type, 4));
-  enter_global(builder, "GUIDSTRING", MAKE_SYMBOL_VALUE(symtype_type, 5));
+  enter_global(builder, "INTEGER", LIBBG3_MAKE_SYMBOL_VALUE(symtype_type, 1));
+  enter_global(builder, "INTEGER64", LIBBG3_MAKE_SYMBOL_VALUE(symtype_type, 2));
+  enter_global(builder, "REAL", LIBBG3_MAKE_SYMBOL_VALUE(symtype_type, 3));
+  enter_global(builder, "STRING", LIBBG3_MAKE_SYMBOL_VALUE(symtype_type, 4));
+  enter_global(builder, "GUIDSTRING", LIBBG3_MAKE_SYMBOL_VALUE(symtype_type, 5));
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_integer);
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_integer64);
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_real);
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_string);
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_guidstring);
   enter_global(builder, "=",
-               MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_equal));
-  enter_global(builder,
-               "!=", MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_not_equal));
-  enter_global(builder, "<", MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_less));
-  enter_global(builder,
-               "<=", MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_less_equal));
+               LIBBG3_MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_equal));
+  enter_global(builder, "!=",
+               LIBBG3_MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_not_equal));
+  enter_global(builder, "<",
+               LIBBG3_MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_less));
+  enter_global(builder, "<=",
+               LIBBG3_MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_less_equal));
   enter_global(builder, ">",
-               MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_greater));
-  enter_global(builder, ">=",
-               MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_greater_equal));
+               LIBBG3_MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_greater));
+  enter_global(
+      builder,
+      ">=", LIBBG3_MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_greater_equal));
   enter_global(builder, "GoalCompleted/0",
-               MAKE_SYMBOL_VALUE(symtype_reserved, symbol_goal_completed));
+               LIBBG3_MAKE_SYMBOL_VALUE(symtype_reserved, symbol_goal_completed));
 }
 
 void bg3_osiris_save_builder_destroy(bg3_osiris_save_builder* builder) {
@@ -7166,7 +7175,7 @@ static bg3_status parse_argument(bg3_osiris_save_builder* builder,
           return bg3_error_failed;
         }
         status = enter_variable(builder, l->next.text.data, builder->next_var);
-        localsym = MAKE_SYMBOL_VALUE(symtype_variable, builder->next_var);
+        localsym = LIBBG3_MAKE_SYMBOL_VALUE(symtype_variable, builder->next_var);
         assert(!status);
         bg3_osiris_binding* new_var = builder->current_vars + builder->next_var;
         new_var->is_variable = 1;
@@ -7181,7 +7190,7 @@ static bg3_status parse_argument(bg3_osiris_save_builder* builder,
       }
     }
     SLURP(symbol);
-    *arg = builder->current_vars[SYMBOL_INDEX_OF(localsym)];
+    *arg = builder->current_vars[LIBBG3_SYMBOL_INDEX_OF(localsym)];
     return bg3_success;
   } else if (l->next.type == bg3_sexp_token_type_lparen) {
     // cast or enum
@@ -7399,21 +7408,21 @@ static bg3_status parse_action_list(bg3_osiris_save_builder* builder,
               builder->current_item.text.data, builder->current_item.line);
       return status;
     }
-    if (SYMBOL_TYPE_OF(symval) == symtype_reserved &&
-        SYMBOL_INDEX_OF(symval) == symbol_goal_completed) {
+    if (LIBBG3_SYMBOL_TYPE_OF(symval) == symtype_reserved &&
+        LIBBG3_SYMBOL_INDEX_OF(symval) == symbol_goal_completed) {
       if (action.retract) {
         fprintf(stderr, "'not' modifier is invalid on GoalCompleted at line %d\n",
                 l->next.line);
         return bg3_error_failed;
       }
       action.completed_goal_id = builder->current_goal_id;
-    } else if (SYMBOL_TYPE_OF(symval) != symtype_function) {
+    } else if (LIBBG3_SYMBOL_TYPE_OF(symval) != symtype_function) {
       fprintf(stderr, "'%s' does not name a predicate at line %d\n",
               builder->current_item.text.data, builder->current_item.line);
       return bg3_error_failed;
     } else {
       bg3_osiris_function_info* fn =
-          builder->save.functions + (SYMBOL_INDEX_OF(symval) - 1);
+          builder->save.functions + (LIBBG3_SYMBOL_INDEX_OF(symval) - 1);
       if ((status = infer_and_check_types(builder, fn, action.num_arguments,
                                           action.arguments, binding_lines))) {
         return bg3_error_failed;
@@ -7459,9 +7468,9 @@ static bg3_status parse_condition(bg3_osiris_save_builder* builder,
   MATCH(symbol);
   void* symval;
   if (!lookup_global(builder, l->next.text.data, &symval) &&
-      SYMBOL_TYPE_OF(symval) == symtype_compare) {
+      LIBBG3_SYMBOL_TYPE_OF(symval) == symtype_compare) {
     cond->type = condition_compare;
-    cond->compare_op = (bg3_osiris_compare_op)SYMBOL_INDEX_OF(symval);
+    cond->compare_op = (bg3_osiris_compare_op)LIBBG3_SYMBOL_INDEX_OF(symval);
   } else {
     if (!strcmp(l->next.text.data, "not")) {
       SLURP(symbol);
