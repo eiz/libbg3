@@ -46,16 +46,10 @@ typedef enum bg3_status {
 
 void __attribute__((noreturn, format(printf, 1, 2))) bg3_panic(char const* fmt, ...);
 
-#define IS_SET(field, flag) (((field) & (flag)) != 0)
-#define ROUND_UP(N, S)      ((((N) + (S)-1) / (S)) * (S))
-#define COUNT_OF(array)     ((sizeof(array)) / sizeof(*(array)))
-#ifndef MAX
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#endif
-#ifndef MIN
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
-#endif
-#define CDIV(a, b) (((a) + (b)-1) / (b))
+#define LIBBG3_IS_SET(field, flag) (((field) & (flag)) != 0)
+#define LIBBG3_COUNT_OF(array)     ((sizeof(array)) / sizeof(*(array)))
+#define LIBBG3_MAX(x, y)           (((x) > (y)) ? (x) : (y))
+#define LIBBG3_MIN(x, y)           (((x) < (y)) ? (x) : (y))
 
 static inline uint32_t bg3__next_power_of_2(uint32_t v) {
   v--;
@@ -69,7 +63,7 @@ static inline uint32_t bg3__next_power_of_2(uint32_t v) {
 }
 
 static inline float bg3__clampf(float x, float lo, float hi) {
-  return MAX(lo, MIN(x, hi));
+  return LIBBG3_MAX(lo, LIBBG3_MIN(x, hi));
 }
 
 static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
@@ -77,7 +71,7 @@ static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
   return x * x * (3.0f - 2.0f * x);
 }
 
-#define UUID_STRING_LEN 37  // including the null terminator
+#define LIBBG3_UUID_STRING_LEN 37  // including the null terminator
 
 typedef struct uuid {
   uint32_t word;
@@ -99,7 +93,6 @@ bg3_status bg3_mapped_file_read(bg3_mapped_file* file,
                                 void* dest,
                                 size_t offset,
                                 size_t len);
-int bg3_mkdirp(char* path);
 
 // the absolute most poverty level parallel do stuff operator
 struct bg3_parallel_for_thread;
@@ -195,6 +188,7 @@ static inline void bg3_cursor_init(bg3_cursor* cursor, void* ptr, size_t length)
 static inline void bg3_cursor_read(bg3_cursor* cursor, void* dest, size_t length) {
   ptrdiff_t avail = cursor->end - cursor->ptr;
   if (avail < length) {
+    // TODO logging
     printf("buffer copy out of bounds\n");
     abort();
   }
@@ -321,7 +315,7 @@ char* bg3_arena_strdup(bg3_arena* a, char const* str);
 char* bg3_arena_sprintf(bg3_arena* a, char const* format, ...);
 
 #ifdef __cplusplus
-#define array_push(alloc, owner, member, val)                                  \
+#define LIBBG3_ARRAY_PUSH(alloc, owner, member, val)                           \
   do {                                                                         \
     if ((owner)->cap_##member == (owner)->num_##member) {                      \
       size_t old_cap = (owner)->cap_##member;                                  \
@@ -336,7 +330,7 @@ char* bg3_arena_sprintf(bg3_arena* a, char const* format, ...);
     (owner)->member[(owner)->num_##member++] = val;                            \
   } while (0)
 #else
-#define array_push(alloc, owner, member, val)                                  \
+#define LIBBG3_ARRAY_PUSH(alloc, owner, member, val)                           \
   do {                                                                         \
     if ((owner)->cap_##member == (owner)->num_##member) {                      \
       size_t old_cap = (owner)->cap_##member;                                  \
@@ -353,21 +347,23 @@ char* bg3_arena_sprintf(bg3_arena* a, char const* format, ...);
 #endif
 
 // pack files
-#define LSPK_MAGIC   0x4B50534C
-#define LSPK_VERSION 18
+#define LIBBG3_LSPK_MAGIC   0x4B50534C
+#define LIBBG3_LSPK_VERSION 18
 
-#define LSPK_ENTRY_COMPRESSION_METHOD_MASK 0xF
-#define LSPK_ENTRY_COMPRESSION_LEVEL_MASK  0xF0
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD_MASK 0xF
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_LEVEL_MASK  0xF0
 
-#define LSPK_ENTRY_COMPRESSION_METHOD(x) ((x) & LSPK_ENTRY_COMPRESSION_METHOD_MASK)
-#define LSPK_ENTRY_COMPRESSION_LEVEL(x)  (((x) & LSPK_ENTRY_COMPRESSION_LEVEL_MASK) >> 4)
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(x) \
+  ((x) & LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD_MASK)
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_LEVEL(x) \
+  (((x) & LIBBG3_LSPK_ENTRY_COMPRESSION_LEVEL_MASK) >> 4)
 
-#define LSPK_ENTRY_COMPRESSION_NONE    0
-#define LSPK_ENTRY_COMPRESSION_ZLIB    1
-#define LSPK_ENTRY_COMPRESSION_LZ4     2
-#define LSPK_ENTRY_COMPRESSION_FAST    1
-#define LSPK_ENTRY_COMPRESSION_DEFAULT 2
-#define LSPK_ENTRY_COMPRESSION_MAX     4
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_NONE    0
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_ZLIB    1
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_LZ4     2
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_FAST    1
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_DEFAULT 2
+#define LIBBG3_LSPK_ENTRY_COMPRESSION_MAX     4
 
 typedef struct bg3_lspk_header {
   uint32_t magic;
@@ -410,9 +406,9 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
                                  size_t* dest_len);
 
 // object files
-#define LSOF_MAGIC       0x464F534C
-#define LSOF_VERSION_MIN 6
-#define LSOF_VERSION_MAX 7
+#define LIBBG3_LSOF_MAGIC       0x464F534C
+#define LIBBG3_LSOF_VERSION_MIN 6
+#define LIBBG3_LSOF_VERSION_MAX 7
 
 typedef enum {
   bg3_lsof_dt_none = 0x00,
@@ -472,9 +468,9 @@ typedef struct bg3_lsof_header {
 } bg3_lsof_header;
 
 // Not always set even in current BG3!
-#define LSOF_FLAG_HAS_SIBLING_POINTERS 0x1
+#define LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS 0x1
 // This is set on some _merged.lsf files in Levels/ and I'm not sure what it is
-#define LSOF_FLAG_UNKNOWN_1            0x2
+#define LIBBG3_LSOF_FLAG_UNKNOWN_1            0x2
 
 typedef struct bg3_lsof_sym_ref {
   uint16_t entry;
@@ -601,7 +597,7 @@ bg3_status bg3_lsof_writer_push_sexps(bg3_lsof_writer* writer,
                                       size_t data_len);
 
 // localization files
-#define LOCA_MAGIC 0x41434F4C  // 'LOCA' in little endian
+#define LIBBG3_LOCA_MAGIC 0x41434F4C  // 'LOCA' in little endian
 
 typedef struct bg3_loca_reader_entry_raw {
   char handle[64];
@@ -647,9 +643,9 @@ bg3_status bg3_loca_writer_write_file(bg3_loca_writer* writer, char const* path)
 
 // patch files
 
-#define PATCH_MAGIC              0x6E6F697372655650  // 'PVersion'
-#define PATCH_VERSION            8
-#define PATCH_VERSION_NON_ROBUST 5
+#define LIBBG3_PATCH_MAGIC              0x6E6F697372655650  // 'PVersion'
+#define LIBBG3_PATCH_VERSION            8
+#define LIBBG3_PATCH_VERSION_NON_ROBUST 5
 
 typedef struct bg3_patch_header {
   uint64_t magic;
@@ -730,15 +726,15 @@ typedef enum bg3_granny_compression_type {
 
 // there are other granny magics, but this one is the one we care about:
 // 64-bit little endian.
-#define GRANNY_MAGIC_HI      0xC4EDBE90A9EB131E
-#define GRANNY_MAGIC_LO      0x141F636F5E499BE5
-#define GRANNY_VERSION       7
-#define GRANNY_BITKNIT_CHUNK 0x2000
+#define LIBBG3_GRANNY_MAGIC_HI      0xC4EDBE90A9EB131E
+#define LIBBG3_GRANNY_MAGIC_LO      0x141F636F5E499BE5
+#define LIBBG3_GRANNY_VERSION       7
+#define LIBBG3_GRANNY_BITKNIT_CHUNK 0x2000
 // Granny pervasively uses packed alignment structs on disk, and their pointer
 // fixup system really wants to in-place update 4-byte aligned 8-byte pointers
 // in the 64-bit variant. So, contrary to all other formats supported in this
 // program, we actually use packed alignment for them.
-#define GRANNY_PACK          __attribute__((__packed__))
+#define LIBBG3_GRANNY_PACK          __attribute__((__packed__))
 
 // Begin Granny3D on-disk structures
 
@@ -768,17 +764,17 @@ typedef enum bg3_granny_data_type {
   bg3_granny_dt_count = bg3_granny_dt_empty_reference + 1,
 } bg3_granny_data_type;
 
-typedef struct GRANNY_PACK bg3_granny_section_ptr {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_section_ptr {
   uint32_t section;
   uint32_t offset;
-} GRANNY_PACK bg3_granny_section_ptr;
+} LIBBG3_GRANNY_PACK bg3_granny_section_ptr;
 
-typedef struct GRANNY_PACK bg3_granny_fixup {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_fixup {
   uint32_t section_offset;
   bg3_granny_section_ptr ptr;
-} GRANNY_PACK bg3_granny_fixup;
+} LIBBG3_GRANNY_PACK bg3_granny_fixup;
 
-typedef struct GRANNY_PACK bg3_granny_magic {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_magic {
   uint64_t lo;
   uint64_t hi;
   uint32_t header_size;
@@ -786,7 +782,7 @@ typedef struct GRANNY_PACK bg3_granny_magic {
   uint32_t reserved[2];
 } bg3_granny_magic;
 
-typedef struct GRANNY_PACK bg3_granny_header {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_header {
   uint32_t format_version;
   uint32_t file_size;
   uint32_t crc32;
@@ -800,7 +796,7 @@ typedef struct GRANNY_PACK bg3_granny_header {
   uint32_t reserved[3];
 } bg3_granny_header;
 
-typedef struct GRANNY_PACK bg3_granny_section_header {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_section_header {
   uint32_t compression;
   uint32_t offset;
   uint32_t compressed_len;
@@ -815,7 +811,7 @@ typedef struct GRANNY_PACK bg3_granny_section_header {
   uint32_t num_mixed_marshals;
 } bg3_granny_section_header;
 
-typedef struct GRANNY_PACK bg3_granny_type_info {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_type_info {
   bg3_granny_data_type type;
   char* name;
   struct bg3_granny_type_info* reference_type;
@@ -824,31 +820,31 @@ typedef struct GRANNY_PACK bg3_granny_type_info {
   uint64_t reserved;
 } bg3_granny_type_info;
 
-typedef struct GRANNY_PACK bg3_granny_variant {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_variant {
   bg3_granny_type_info* type;
   void* obj;
 } bg3_granny_variant;
 
-typedef struct GRANNY_PACK bg3_granny_variant_array {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_variant_array {
   bg3_granny_type_info* type;
   int32_t num_items;
   void* items;
 } bg3_granny_variant_array;
 
-typedef struct GRANNY_PACK bg3_granny_transform {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_transform {
   uint32_t flags;
   bg3_vec3 position;
   bg3_vec4 orientation;
   bg3_vec3 scale_shear[3];
 } bg3_granny_transform;
 
-typedef struct GRANNY_PACK bg3_granny_texture_layout {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_texture_layout {
   int32_t bytes_per_pixel;
   int32_t shift_for_component[4];
   int32_t bits_for_component[4];
 } bg3_granny_texture_layout;
 
-typedef struct GRANNY_PACK bg3_granny_obj_art_tool_info {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_art_tool_info {
   char* from_art_tool_name;
   int32_t art_tool_major_revision;
   int32_t art_tool_minor_revision;
@@ -861,7 +857,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_art_tool_info {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_art_tool_info;
 
-typedef struct GRANNY_PACK bg3_granny_obj_exporter_info {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_exporter_info {
   char* exporter_name;
   int32_t exporter_major_revision;
   int32_t exporter_minor_revision;
@@ -870,13 +866,13 @@ typedef struct GRANNY_PACK bg3_granny_obj_exporter_info {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_exporter_info;
 
-typedef struct GRANNY_PACK bg3_granny_obj_mip_level {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_mip_level {
   int32_t stride;
   int32_t num_pixel_bytes;
   uint8_t* pixel_bytes;
 } bg3_granny_obj_mip_level;
 
-typedef struct GRANNY_PACK bg3_granny_obj_texture {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_texture {
   char* from_file_name;
   int32_t texture_type;
   int32_t width;
@@ -889,11 +885,11 @@ typedef struct GRANNY_PACK bg3_granny_obj_texture {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_texture;
 
-typedef struct GRANNY_PACK bg3_granny_obj_material {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_material {
   uint8_t dummy;
 } bg3_granny_obj_material;
 
-typedef struct GRANNY_PACK bg3_granny_obj_bone {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_bone {
   char* name;
   int32_t parent_index;
   bg3_granny_transform local_transform;
@@ -902,7 +898,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_bone {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_bone;
 
-typedef struct GRANNY_PACK bg3_granny_obj_skeleton {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_skeleton {
   char* name;
   int32_t num_bones;
   bg3_granny_obj_bone* bones;
@@ -910,7 +906,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_skeleton {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_skeleton;
 
-typedef struct GRANNY_PACK bg3_granny_obj_vertex_annotation_set {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_vertex_annotation_set {
   char* name;
   bg3_granny_variant_array vertex_annotations;
   int32_t indices_map_from_vertex_to_annotation;
@@ -918,7 +914,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_vertex_annotation_set {
   int32_t* vertex_annotation_indices;
 } bg3_granny_obj_vertex_annotation_set;
 
-typedef struct GRANNY_PACK bg3_granny_obj_vertex_data {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_vertex_data {
   bg3_granny_variant_array vertices;
   int32_t num_vertex_component_names;
   char** vertex_component_names;
@@ -926,11 +922,11 @@ typedef struct GRANNY_PACK bg3_granny_obj_vertex_data {
   bg3_granny_obj_vertex_annotation_set* vertex_annotation_sets;
 } bg3_granny_obj_vertex_data;
 
-typedef struct GRANNY_PACK bg3_granny_obj_material_group {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_material_group {
   uint8_t dummy;
 } bg3_granny_obj_material_group;
 
-typedef struct GRANNY_PACK bg3_granny_obj_tri_annotation_set {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_tri_annotation_set {
   char* name;
   bg3_granny_variant_array tri_annotations;
   int32_t indices_map_from_tri_to_annotation;
@@ -938,7 +934,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_tri_annotation_set {
   int32_t* tri_annotation_indices;
 } bg3_granny_obj_tri_annotation_set;
 
-typedef struct GRANNY_PACK bg3_granny_obj_tri_topology {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_tri_topology {
   int32_t num_groups;
   bg3_granny_obj_material_group* groups;
   int32_t num_indices;
@@ -963,13 +959,13 @@ typedef struct GRANNY_PACK bg3_granny_obj_tri_topology {
   bg3_granny_obj_tri_annotation_set* tri_annotation_sets;
 } bg3_granny_obj_tri_topology;
 
-typedef struct GRANNY_PACK bg3_granny_obj_morph_target {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_morph_target {
   char* scalar_name;
   bg3_granny_obj_vertex_data* vertex_data;
   int32_t data_is_deltas;
 } bg3_granny_obj_morph_target;
 
-typedef struct GRANNY_PACK bg3_granny_obj_bone_binding {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_bone_binding {
   char* bone_name;
   bg3_vec3 obb_min;
   bg3_vec3 obb_max;
@@ -977,7 +973,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_bone_binding {
   int32_t* triangle_indices;
 } bg3_granny_obj_bone_binding;
 
-typedef struct GRANNY_PACK bg3_granny_obj_mesh {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_mesh {
   char* name;
   bg3_granny_obj_vertex_data* primary_vertex_data;
   int32_t num_morph_targets;
@@ -990,7 +986,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_mesh {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_mesh;
 
-typedef struct GRANNY_PACK bg3_granny_obj_model {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_model {
   char* name;
   bg3_granny_obj_skeleton* skeleton;
   bg3_granny_transform initial_placement;
@@ -999,15 +995,15 @@ typedef struct GRANNY_PACK bg3_granny_obj_model {
   bg3_granny_variant extended_data;
 } bg3_granny_obj_model;
 
-typedef struct GRANNY_PACK bg3_granny_obj_track_group {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_track_group {
   uint8_t dummy;
 } bg3_granny_obj_track_group;
 
-typedef struct GRANNY_PACK bg3_granny_obj_animation {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_animation {
   uint8_t dummy;
 } bg3_granny_obj_animation;
 
-typedef struct GRANNY_PACK bg3_granny_obj_root {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_root {
   bg3_granny_obj_art_tool_info* art_tool_info;
   bg3_granny_obj_exporter_info* exporter_info;
   char* from_file_name;
@@ -1036,13 +1032,13 @@ typedef struct GRANNY_PACK bg3_granny_obj_root {
 
 // There's probably other vertex formats in the game, but this is the one I
 // care about rn
-typedef struct GRANNY_PACK bg3_granny_obj_ls_vertex {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_vertex {
   bg3_vec3 position;
   int16_t qtangent[4];
   bg3_half texture_coordinates0[2];
 } bg3_granny_obj_ls_vertex;
 
-typedef struct GRANNY_PACK bg3_granny_obj_ls_format_desc {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_format_desc {
   int8_t stream;
   uint8_t usage;
   uint8_t usage_index;
@@ -1051,7 +1047,7 @@ typedef struct GRANNY_PACK bg3_granny_obj_ls_format_desc {
   uint8_t size;
 } bg3_granny_obj_ls_format_desc;
 
-typedef struct GRANNY_PACK bg3_granny_obj_ls_user_mesh_properties {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_user_mesh_properties {
   uint32_t flags[4];
   int32_t lod;
   int32_t num_format_descs;
@@ -1061,9 +1057,9 @@ typedef struct GRANNY_PACK bg3_granny_obj_ls_user_mesh_properties {
   int32_t is_impostor;
 } bg3_granny_obj_ls_user_mesh_properties;
 
-#define GRANNY_LS_VERSION 3  // expected value of lsm_version
+#define LIBBG3_GRANNY_LS_VERSION 3  // expected value of lsm_version
 
-typedef struct GRANNY_PACK bg3_granny_obj_ls_mesh {
+typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_mesh {
   bg3_granny_obj_ls_user_mesh_properties* user_mesh_properties;
   int32_t lsm_version;
 } bg3_granny_obj_ls_mesh;
@@ -1112,19 +1108,6 @@ typedef struct bg3_granny_reader {
 } bg3_granny_reader;
 
 // sexp lexer
-#define MATCH(ty)                                                               \
-  do {                                                                          \
-    if (l->next.type != bg3_sexp_token_type_##ty) {                             \
-      fprintf(stderr, "expected token " #ty " but got %d instead on line %d\n", \
-              l->next.type, l->next.line);                                      \
-      return bg3_error_failed;                                                  \
-    }                                                                           \
-  } while (0)
-#define SLURP(type)            \
-  do {                         \
-    MATCH(type);               \
-    bg3_sexp_lexer_advance(l); \
-  } while (0)
 
 typedef enum bg3_sexp_token_type {
   bg3_sexp_token_type_invalid,
@@ -1186,8 +1169,8 @@ uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf);
 uint32_t bg3_ibuf_get_indent(bg3_indent_buffer* buf);
 
 // xref index
-#define INDEX_MAGIC   0x5844534C  // 'LSDX'
-#define INDEX_VERSION 1
+#define LIBBG3_INDEX_MAGIC   0x5844534C  // 'LSDX'
+#define LIBBG3_INDEX_VERSION 1
 
 typedef struct bg3_index_entry {
   uint32_t string_offset;
@@ -1312,72 +1295,72 @@ typedef enum bg3_surface_type {
   bg3_surface_cloudkill6_cloud = 74,
 } bg3_surface_type;
 
-#define AIGRID_VERSION 21
+#define LIBBG3_AIGRID_VERSION 21
 
 // Many of the AI grid state flags are updated dynamically at runtime and their
 // stored value doesn't seem to really matter. The ones I know for sure have an
 // effect at load time are:
-//  - AIGRID_TILE_SURFACE_{CLOUD, GROUND}_MASK
-//  - AIGRID_TILE_EMPTY
-//  - AIGRID_TILE_MOVEMENT_BLOCKED
-//  - AIGRID_TILE_LIT_SUNLIGHT_ATMOSPHERE
+//  - LIBBG3_AIGRID_TILE_SURFACE_{CLOUD, GROUND}_MASK
+//  - LIBBG3_AIGRID_TILE_EMPTY
+//  - LIBBG3_AIGRID_TILE_MOVEMENT_BLOCKED
+//  - LIBBG3_AIGRID_TILE_LIT_SUNLIGHT_ATMOSPHERE
 
 // At load time, tile state is masked to these bits only.
-#define AIGRID_TILE_PERSISTENT_MASK          0xF9BE3FFFFF00F84FULL
-#define AIGRID_TILE_SURFACE_GROUND_SHIFT     24
-#define AIGRID_TILE_SURFACE_CLOUD_SHIFT      32
+#define LIBBG3_AIGRID_TILE_PERSISTENT_MASK          0xF9BE3FFFFF00F84FULL
+#define LIBBG3_AIGRID_TILE_SURFACE_GROUND_SHIFT     24
+#define LIBBG3_AIGRID_TILE_SURFACE_CLOUD_SHIFT      32
 // surface indices in cloud layer have this offset added automatically
-#define AIGRID_TILE_SURFACE_CLOUD_OFFSET     38
-#define AIGRID_TILE_EMPTY                    0x0000000000000001ULL
-#define AIGRID_TILE_MOVEMENT_BLOCKED_BASE    0x0000000000000002ULL
-#define AIGRID_TILE_MOVEMENT_BLOCKED         0x0000000000000004ULL
-#define AIGRID_TILE_SHOOT_BLOCKED            0x0000000000000008ULL
-#define AIGRID_TILE_BUSY_CHARACTER_WALK      0x0000000000000010ULL
-#define AIGRID_TILE_BUSY_CHARACTER_SHOOT     0x0000000000000020ULL
-#define AIGRID_TILE_CLIMBABLE_STATIC         0x0000000000000040ULL
-#define AIGRID_TILE_BUSY_ITEM_WALK           0x0000000000000080ULL
-#define AIGRID_TILE_BUSY_ITEM_SHOOT          0x0000000000000100ULL
-#define AIGRID_TILE_BUSY_ITEM_SURFACE        0x0000000000000200ULL
-#define AIGRID_TILE_BUSY_ITEM_CLOUD          0x0000000000000400ULL
-#define AIGRID_TILE_SLOPE_STEEP              0x0000000000000800ULL
-#define AIGRID_TILE_BLOCKED_SLOPE            0x0000000000001000ULL
-#define AIGRID_TILE_BLOCKED_PAINTED          0x0000000000002000ULL
-#define AIGRID_TILE_BLOCKED_STATIC           0x0000000000004000ULL
-#define AIGRID_TILE_BLOCKED_UNREACHABLE      0x0000000000008000ULL
-#define AIGRID_TILE_INDESTRUCTIBLE_OBJECT    0x0000000000010000ULL
-#define AIGRID_TILE_CLIMBABLE_DYNAMIC        0x0000000000020000ULL
-#define AIGRID_TILE_TRAP                     0x0000000000040000ULL
-#define AIGRID_TILE_PORTAL_SOURCE            0x0000000000080000ULL
-#define AIGRID_TILE_PORTAL_DESTINATION       0x0000000000100000ULL
-#define AIGRID_TILE_TIMELINE                 0x0000000000200000ULL
-#define AIGRID_TILE_DOOR_WALK                0x0000000000400000ULL
-#define AIGRID_TILE_DOOR_SHOOT               0x0000000000800000ULL
-#define AIGRID_TILE_SURFACE_GROUND_MASK      0x00000000FF000000ULL
-#define AIGRID_TILE_SURFACE_CLOUD_MASK       0x000000FF00000000ULL
-#define AIGRID_TILE_MATERIAL_MASK            0x00003F0000000000ULL
-#define AIGRID_TILE_OBSCURED_LIGHTSOURCE     0x0000400000000000ULL
-#define AIGRID_TILE_LIT_SUNLIGHT_LIGHTSOURCE 0x0000800000000000ULL
-#define AIGRID_TILE_HALF_LIT_LIGHTSOURCE     0x0001000000000000ULL
-#define AIGRID_TILE_LEDGE_STATIC             0x0002000000000000ULL
-#define AIGRID_TILE_LEDGE_NORMAL_NORTH       0x0004000000000000ULL
-#define AIGRID_TILE_LEDGE_NORMAL_EAST        0x0008000000000000ULL
-#define AIGRID_TILE_LEDGE_NORMAL_SOUTH       0x0010000000000000ULL
-#define AIGRID_TILE_LEDGE_NORMAL_WEST        0x0020000000000000ULL
-#define AIGRID_TILE_CHASM                    0x0040000000000000ULL
-#define AIGRID_TILE_SUBGRID_EDGE             0x0080000000000000ULL
-#define AIGRID_TILE_CAN_BE_LIT_SUN           0x0100000000000000ULL
-#define AIGRID_TILE_MULTIPLE_SUBGRIDS        0x0200000000000000ULL
-#define AIGRID_TILE_FULLY_LIT_LIGHTSOURCE    0x0400000000000000ULL
+#define LIBBG3_AIGRID_TILE_SURFACE_CLOUD_OFFSET     38
+#define LIBBG3_AIGRID_TILE_EMPTY                    0x0000000000000001ULL
+#define LIBBG3_AIGRID_TILE_MOVEMENT_BLOCKED_BASE    0x0000000000000002ULL
+#define LIBBG3_AIGRID_TILE_MOVEMENT_BLOCKED         0x0000000000000004ULL
+#define LIBBG3_AIGRID_TILE_SHOOT_BLOCKED            0x0000000000000008ULL
+#define LIBBG3_AIGRID_TILE_BUSY_CHARACTER_WALK      0x0000000000000010ULL
+#define LIBBG3_AIGRID_TILE_BUSY_CHARACTER_SHOOT     0x0000000000000020ULL
+#define LIBBG3_AIGRID_TILE_CLIMBABLE_STATIC         0x0000000000000040ULL
+#define LIBBG3_AIGRID_TILE_BUSY_ITEM_WALK           0x0000000000000080ULL
+#define LIBBG3_AIGRID_TILE_BUSY_ITEM_SHOOT          0x0000000000000100ULL
+#define LIBBG3_AIGRID_TILE_BUSY_ITEM_SURFACE        0x0000000000000200ULL
+#define LIBBG3_AIGRID_TILE_BUSY_ITEM_CLOUD          0x0000000000000400ULL
+#define LIBBG3_AIGRID_TILE_SLOPE_STEEP              0x0000000000000800ULL
+#define LIBBG3_AIGRID_TILE_BLOCKED_SLOPE            0x0000000000001000ULL
+#define LIBBG3_AIGRID_TILE_BLOCKED_PAINTED          0x0000000000002000ULL
+#define LIBBG3_AIGRID_TILE_BLOCKED_STATIC           0x0000000000004000ULL
+#define LIBBG3_AIGRID_TILE_BLOCKED_UNREACHABLE      0x0000000000008000ULL
+#define LIBBG3_AIGRID_TILE_INDESTRUCTIBLE_OBJECT    0x0000000000010000ULL
+#define LIBBG3_AIGRID_TILE_CLIMBABLE_DYNAMIC        0x0000000000020000ULL
+#define LIBBG3_AIGRID_TILE_TRAP                     0x0000000000040000ULL
+#define LIBBG3_AIGRID_TILE_PORTAL_SOURCE            0x0000000000080000ULL
+#define LIBBG3_AIGRID_TILE_PORTAL_DESTINATION       0x0000000000100000ULL
+#define LIBBG3_AIGRID_TILE_TIMELINE                 0x0000000000200000ULL
+#define LIBBG3_AIGRID_TILE_DOOR_WALK                0x0000000000400000ULL
+#define LIBBG3_AIGRID_TILE_DOOR_SHOOT               0x0000000000800000ULL
+#define LIBBG3_AIGRID_TILE_SURFACE_GROUND_MASK      0x00000000FF000000ULL
+#define LIBBG3_AIGRID_TILE_SURFACE_CLOUD_MASK       0x000000FF00000000ULL
+#define LIBBG3_AIGRID_TILE_MATERIAL_MASK            0x00003F0000000000ULL
+#define LIBBG3_AIGRID_TILE_OBSCURED_LIGHTSOURCE     0x0000400000000000ULL
+#define LIBBG3_AIGRID_TILE_LIT_SUNLIGHT_LIGHTSOURCE 0x0000800000000000ULL
+#define LIBBG3_AIGRID_TILE_HALF_LIT_LIGHTSOURCE     0x0001000000000000ULL
+#define LIBBG3_AIGRID_TILE_LEDGE_STATIC             0x0002000000000000ULL
+#define LIBBG3_AIGRID_TILE_LEDGE_NORMAL_NORTH       0x0004000000000000ULL
+#define LIBBG3_AIGRID_TILE_LEDGE_NORMAL_EAST        0x0008000000000000ULL
+#define LIBBG3_AIGRID_TILE_LEDGE_NORMAL_SOUTH       0x0010000000000000ULL
+#define LIBBG3_AIGRID_TILE_LEDGE_NORMAL_WEST        0x0020000000000000ULL
+#define LIBBG3_AIGRID_TILE_CHASM                    0x0040000000000000ULL
+#define LIBBG3_AIGRID_TILE_SUBGRID_EDGE             0x0080000000000000ULL
+#define LIBBG3_AIGRID_TILE_CAN_BE_LIT_SUN           0x0100000000000000ULL
+#define LIBBG3_AIGRID_TILE_MULTIPLE_SUBGRIDS        0x0200000000000000ULL
+#define LIBBG3_AIGRID_TILE_FULLY_LIT_LIGHTSOURCE    0x0400000000000000ULL
 // I'm still not fully clear on the exact mechanics of this flag, but it causes
 // the tile's obscurity state to be "Clear" instead of "Heavily Obscured" in my
 // test case. I believe the exact result may depend on the lighting system
 // behavior however -- the obscurity values it's selecting between seem to come
 // from there.
-#define AIGRID_TILE_LIT_SUNLIGHT_ATMOSPHERE  0x0800000000000000ULL
-#define AIGRID_TILE_PAINTED_SURFACE          0x1000000000000000ULL
-#define AIGRID_TILE_PAINTED_CLOUD            0x2000000000000000ULL
-#define AIGRID_TILE_IRREPLACEABLE_SURFACE    0x4000000000000000ULL
-#define AIGRID_TILE_IRREPLACEABLE_CLOUD      0x8000000000000000ULL
+#define LIBBG3_AIGRID_TILE_LIT_SUNLIGHT_ATMOSPHERE  0x0800000000000000ULL
+#define LIBBG3_AIGRID_TILE_PAINTED_SURFACE          0x1000000000000000ULL
+#define LIBBG3_AIGRID_TILE_PAINTED_CLOUD            0x2000000000000000ULL
+#define LIBBG3_AIGRID_TILE_IRREPLACEABLE_SURFACE    0x4000000000000000ULL
+#define LIBBG3_AIGRID_TILE_IRREPLACEABLE_CLOUD      0x8000000000000000ULL
 
 typedef struct bg3_aigrid_header {
   uint32_t version;
@@ -1410,40 +1393,40 @@ typedef struct bg3_aigrid_tile {
 
 static inline void bg3_aigrid_tile_set_ground_surface(bg3_aigrid_tile* tile,
                                                       bg3_surface_type surface) {
-  tile->state &= ~AIGRID_TILE_SURFACE_GROUND_MASK;
-  tile->state |= ((uint64_t)surface << AIGRID_TILE_SURFACE_GROUND_SHIFT) &
-                 AIGRID_TILE_SURFACE_GROUND_MASK;
+  tile->state &= ~LIBBG3_AIGRID_TILE_SURFACE_GROUND_MASK;
+  tile->state |= ((uint64_t)surface << LIBBG3_AIGRID_TILE_SURFACE_GROUND_SHIFT) &
+                 LIBBG3_AIGRID_TILE_SURFACE_GROUND_MASK;
 }
 
 static inline bg3_surface_type bg3_aigrid_tile_get_ground_surface(bg3_aigrid_tile* tile) {
-  return (bg3_surface_type)((tile->state & AIGRID_TILE_SURFACE_GROUND_MASK) >>
-                            AIGRID_TILE_SURFACE_GROUND_SHIFT);
+  return (bg3_surface_type)((tile->state & LIBBG3_AIGRID_TILE_SURFACE_GROUND_MASK) >>
+                            LIBBG3_AIGRID_TILE_SURFACE_GROUND_SHIFT);
 }
 
 static inline void bg3_aigrid_tile_set_cloud_surface(bg3_aigrid_tile* tile,
                                                      bg3_surface_type surface) {
   if (surface != bg3_surface_none) {
-    surface = (bg3_surface_type)(surface - AIGRID_TILE_SURFACE_CLOUD_OFFSET);
+    surface = (bg3_surface_type)(surface - LIBBG3_AIGRID_TILE_SURFACE_CLOUD_OFFSET);
   }
-  tile->state &= ~AIGRID_TILE_SURFACE_CLOUD_MASK;
-  tile->state |= ((uint64_t)surface << AIGRID_TILE_SURFACE_CLOUD_SHIFT) &
-                 AIGRID_TILE_SURFACE_CLOUD_MASK;
+  tile->state &= ~LIBBG3_AIGRID_TILE_SURFACE_CLOUD_MASK;
+  tile->state |= ((uint64_t)surface << LIBBG3_AIGRID_TILE_SURFACE_CLOUD_SHIFT) &
+                 LIBBG3_AIGRID_TILE_SURFACE_CLOUD_MASK;
 }
 
 static inline bg3_surface_type bg3_aigrid_tile_get_cloud_surface(bg3_aigrid_tile* tile) {
   bg3_surface_type surface =
-      (bg3_surface_type)((tile->state & AIGRID_TILE_SURFACE_CLOUD_MASK) >>
-                         AIGRID_TILE_SURFACE_CLOUD_SHIFT);
+      (bg3_surface_type)((tile->state & LIBBG3_AIGRID_TILE_SURFACE_CLOUD_MASK) >>
+                         LIBBG3_AIGRID_TILE_SURFACE_CLOUD_SHIFT);
   if (surface != bg3_surface_none) {
-    surface = (bg3_surface_type)(surface + AIGRID_TILE_SURFACE_CLOUD_OFFSET);
+    surface = (bg3_surface_type)(surface + LIBBG3_AIGRID_TILE_SURFACE_CLOUD_OFFSET);
   }
   return surface;
 }
 
 typedef struct bg3_aigrid_subgrid {
   bg3_aigrid_subgrid_header header;
-  char object_uuid[UUID_STRING_LEN];
-  char template_uuid[UUID_STRING_LEN];
+  char object_uuid[LIBBG3_UUID_STRING_LEN];
+  char template_uuid[LIBBG3_UUID_STRING_LEN];
   bg3_aigrid_tile* tiles;
 } bg3_aigrid_subgrid;
 
@@ -1471,7 +1454,7 @@ typedef struct bg3_aigrid_file {
   bg3_arena alloc;
   bg3_cursor c;
   bg3_aigrid_header header;
-  char file_uuid[UUID_STRING_LEN];
+  char file_uuid[LIBBG3_UUID_STRING_LEN];
   uint32_t num_subgrids;
   uint32_t cap_subgrids;
   bg3_aigrid_subgrid* subgrids;
@@ -1498,9 +1481,9 @@ void bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
 bg3_status bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path);
 
 // osiris
-#define OSIRIS_VERSION_MAJOR 1
-#define OSIRIS_VERSION_MINOR 13
-#define OSIRIS_STRING_MASK   0xAD
+#define LIBBG3_OSIRIS_VERSION_MAJOR 1
+#define LIBBG3_OSIRIS_VERSION_MINOR 13
+#define LIBBG3_OSIRIS_STRING_MASK   0xAD
 
 typedef enum bg3_osiris_prim_type {
   bg3_osiris_prim_type_undef = 0,
@@ -1615,7 +1598,7 @@ typedef struct bg3_osiris_variant {
   };
 } bg3_osiris_variant;
 
-#define OSIRIS_OUT_PARAM_MASK(i) (1 << ((i & 0xF8) + (7 - (i & 7))))
+#define LIBBG3_OSIRIS_OUT_PARAM_MASK(i) (1 << ((i & 0xF8) + (7 - (i & 7))))
 
 typedef struct bg3_osiris_function_info {
   bg3_osiris_function_type type;
@@ -1828,7 +1811,7 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
                                       char const* path,
                                       bool verbose);
 
-#define OSIRIS_MAX_LOCALS 32
+#define LIBBG3_OSIRIS_MAX_LOCALS 32
 
 typedef struct bg3_osiris_save_builder {
   bg3_osiris_save save;
@@ -1837,7 +1820,7 @@ typedef struct bg3_osiris_save_builder {
   bg3_sexp_token current_toplevel;
   bg3_sexp_token current_item;
   uint32_t current_goal_id;
-  bg3_osiris_binding current_vars[OSIRIS_MAX_LOCALS];
+  bg3_osiris_binding current_vars[LIBBG3_OSIRIS_MAX_LOCALS];
   uint32_t next_var;
 } bg3_osiris_save_builder;
 
@@ -1959,6 +1942,20 @@ void uuid_to_string(bg3_uuid const* id, char out[48]) {
 }
 #endif
 
+#define MATCH(ty)                                                               \
+  do {                                                                          \
+    if (l->next.type != bg3_sexp_token_type_##ty) {                             \
+      fprintf(stderr, "expected token " #ty " but got %d instead on line %d\n", \
+              l->next.type, l->next.line);                                      \
+      return bg3_error_failed;                                                  \
+    }                                                                           \
+  } while (0)
+#define SLURP(type)            \
+  do {                         \
+    MATCH(type);               \
+    bg3_sexp_lexer_advance(l); \
+  } while (0)
+
 bg3_status bg3_mapped_file_init_ro(bg3_mapped_file* file, char const* path) {
   file->fd = open(path, O_RDONLY);
   if (file->fd < 0) {
@@ -2043,23 +2040,6 @@ bg3_status bg3_mapped_file_read(bg3_mapped_file* file,
   return bg3_success;
 }
 
-int bg3_mkdirp(char* path) {
-  for (char* p = path; *p; ++p) {
-    if (*p == '/') {
-      bool ok;
-      *p = '\0';
-      ok = mkdir(path, 0777) >= 0 || errno == EEXIST;
-      *p = '/';
-      if (!ok)
-        return -1;
-    }
-  }
-  if (mkdir(path, 0777) < 0 && errno != EEXIST) {
-    return -1;
-  }
-  return 0;
-}
-
 static void* do_parallel_for(void* arg) {
   bg3_parallel_for_thread* tcb = (bg3_parallel_for_thread*)arg;
   tcb->status = tcb->callback(tcb);
@@ -2138,7 +2118,7 @@ void bg3_sync_threads(bg3_parallel_for_thread* tcb) {
 void bg3_buffer_hexdump(bg3_buffer* buf, size_t base, void* ptr, size_t length) {
   size_t line = 0;
   while (line < length) {
-    int line_len = MIN(16, length - line);
+    int line_len = LIBBG3_MIN(16, length - line);
     bg3_buffer_printf(buf, "%08zX: ", base + line);
     for (size_t i = line; i < line + line_len; ++i) {
       bg3_buffer_printf(buf, "%02X ", ((uint8_t*)ptr)[i]);
@@ -2418,7 +2398,7 @@ retry:
       return result;
     }
   }
-  size_t chunk_size = MAX(size, a->chunk_size);
+  size_t chunk_size = LIBBG3_MAX(size, a->chunk_size);
   bg3_arena_chunk* new_chunk =
       (bg3_arena_chunk*)malloc(sizeof(bg3_arena_chunk) + chunk_size);
   new_chunk->bump = (char*)(new_chunk + 1);
@@ -2508,10 +2488,10 @@ int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
     return -1;
   }
   bg3_cursor_read(&c, &file->header, sizeof(bg3_lspk_header));
-  if (file->header.magic != LSPK_MAGIC) {
+  if (file->header.magic != LIBBG3_LSPK_MAGIC) {
     return -1;
   }
-  if (file->header.version != LSPK_VERSION) {
+  if (file->header.version != LIBBG3_LSPK_VERSION) {
     return -1;
   }
   bg3_lspk_manifest_header manifest_header;
@@ -2543,8 +2523,8 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
   size_t avail_len = *dest_len;
   size_t entry_offset = ((size_t)entry->offset_hi << 32) | entry->offset_lo;
   // TODO: bounds checking
-  switch (LSPK_ENTRY_COMPRESSION_METHOD(entry->compression)) {
-    case LSPK_ENTRY_COMPRESSION_ZLIB: {
+  switch (LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(entry->compression)) {
+    case LIBBG3_LSPK_ENTRY_COMPRESSION_ZLIB: {
       unsigned long src_len = entry->compressed_size, need_len = entry->uncompressed_size;
       *dest_len = need_len;
       if (avail_len < need_len) {
@@ -2557,7 +2537,7 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
       }
       break;
     }
-    case LSPK_ENTRY_COMPRESSION_LZ4:
+    case LIBBG3_LSPK_ENTRY_COMPRESSION_LZ4:
       *dest_len = entry->uncompressed_size;
       if (avail_len < entry->uncompressed_size) {
         return bg3_error_overflow;
@@ -2608,8 +2588,8 @@ int do_pack(int argc, char const** argv) {
   manifest_header.num_files = 0;
   manifest_header.compressed_size = 0;
   memset(&file_header, 0, sizeof(bg3_lspk_header));
-  file_header.magic = LSPK_MAGIC;
-  file_header.version = LSPK_VERSION;
+  file_header.magic = LIBBG3_LSPK_MAGIC;
+  file_header.version = LIBBG3_LSPK_VERSION;
   file_header.num_parts = 1;
   file_header.priority = 127;
   fwrite(&file_header, sizeof(bg3_lspk_header), 1, pakfp);
@@ -2789,7 +2769,7 @@ int bg3_lsof_reader_get_node(bg3_lsof_reader* file,
   if (node_index >= file->num_nodes) {
     return -1;
   }
-  bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
+  bool is_wide = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
   ptr += node_index * (is_wide ? sizeof(bg3_lsof_node_wide) : sizeof(bg3_lsof_node_slim));
   if (is_wide) {
     memcpy(node, ptr, sizeof(bg3_lsof_node_wide));
@@ -2811,7 +2791,7 @@ int bg3_lsof_reader_get_attr(bg3_lsof_reader* file,
   if (attr_index >= file->num_attrs) {
     return -1;
   }
-  bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
+  bool is_wide = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
   ptr += attr_index * (is_wide ? sizeof(bg3_lsof_attr_wide) : sizeof(bg3_lsof_attr_slim));
   if (is_wide) {
     memcpy(attr, ptr, sizeof(bg3_lsof_attr_wide));
@@ -2894,17 +2874,17 @@ int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
     goto fail;
   }
   bg3_cursor_read(&c, &file->header, sizeof(bg3_lsof_header));
-  if (file->header.magic != LSOF_MAGIC) {
+  if (file->header.magic != LIBBG3_LSOF_MAGIC) {
     fprintf(stderr, "invalid file magic\n");
     goto fail;
   }
-  if (file->header.version < LSOF_VERSION_MIN ||
-      file->header.version > LSOF_VERSION_MAX) {
+  if (file->header.version < LIBBG3_LSOF_VERSION_MIN ||
+      file->header.version > LIBBG3_LSOF_VERSION_MAX) {
     //    fprintf(stderr, "invalid file version %d\n", file->header.version);
     goto fail;
   }
-  switch (LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression)) {
-    case LSPK_ENTRY_COMPRESSION_NONE:
+  switch (LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression)) {
+    case LIBBG3_LSPK_ENTRY_COMPRESSION_NONE:
       file->owns_sections = false;
       file->string_table_raw = file->data + sizeof(file->header);
       bg3_cursor_read(&c, 0, file->header.string_table.uncompressed_size);
@@ -2918,7 +2898,7 @@ int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
           file->attr_table_raw + file->header.attr_table.uncompressed_size;
       bg3_cursor_read(&c, 0, file->header.value_table.uncompressed_size);
       break;
-    case LSPK_ENTRY_COMPRESSION_LZ4: {
+    case LIBBG3_LSPK_ENTRY_COMPRESSION_LZ4: {
       file->owns_sections = true;
       size_t next_addr = sizeof(file->header);
       bool ok = true;
@@ -2942,16 +2922,16 @@ int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
     }
     default:
       fprintf(stderr, "unsupported compression type %d\n",
-              LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression));
+              LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression));
       goto fail;
   }
   bg3_lsof_symtab_init_data(&file->symtab, file->string_table_raw,
                             file->header.string_table.uncompressed_size);
   created_symtab = true;
-  node_size = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS)
+  node_size = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS)
                   ? sizeof(bg3_lsof_node_wide)
                   : sizeof(bg3_lsof_node_slim);
-  attr_size = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS)
+  attr_size = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS)
                   ? sizeof(bg3_lsof_attr_wide)
                   : sizeof(bg3_lsof_attr_slim);
   file->num_nodes = file->header.node_table.uncompressed_size / node_size;
@@ -2994,7 +2974,7 @@ static void fresh_line(bg3_buffer* out, lsof_print_stack* stack) {
 }
 
 void bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file) {
-  bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
+  bool is_wide = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
   if (!is_wide && !file->value_offsets) {
     size_t value_offset = 0;
     file->value_offsets = (uint32_t*)calloc(file->num_attrs, sizeof(uint32_t));
@@ -3017,7 +2997,7 @@ int bg3_lsof_reader_print_sexp(bg3_lsof_reader* file, bg3_buffer* out) {
   stack.indent = 0;
   stack.is_fresh_line = true;
   bg3_lsof_reader_ensure_value_offsets(file);
-  bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
+  bool is_wide = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
   for (bg3_lsof_node_ref i = 0; i < file->num_nodes; ++i) {
     bg3_lsof_node_wide node;
     if (bg3_lsof_reader_get_node(file, &node, i) < 0) {
@@ -3235,11 +3215,11 @@ void bg3_lsof_writer_destroy(bg3_lsof_writer* writer) {
 bg3_status bg3_lsof_writer_write_file(bg3_lsof_writer* writer, char const* path) {
   bg3_lsof_header header;
   memset(&header, 0, sizeof(bg3_lsof_header));
-  header.magic = LSOF_MAGIC;
-  header.version = LSOF_VERSION_MAX;
+  header.magic = LIBBG3_LSOF_MAGIC;
+  header.version = LIBBG3_LSOF_VERSION_MAX;
   header.engine_version = 0;
   header.compression = 0;
-  header.flags = LSOF_FLAG_HAS_SIBLING_POINTERS;
+  header.flags = LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS;
   bg3_buffer string_buf = {};
   bg3_lsof_symtab_write(&writer->symtab, &string_buf);
   header.string_table.uncompressed_size = string_buf.size;
@@ -3554,7 +3534,7 @@ bg3_status bg3_loca_reader_init(bg3_loca_reader* file, char* data, size_t data_l
   bg3_cursor c;
   bg3_cursor_init(&c, data, data_len);
   bg3_cursor_read(&c, &file->header, sizeof(file->header));
-  if (file->header.magic != LOCA_MAGIC) {
+  if (file->header.magic != LIBBG3_LOCA_MAGIC) {
     return bg3_error_failed;
   }
   file->entries = (bg3_loca_reader_entry*)calloc(file->header.num_entries,
@@ -3623,7 +3603,7 @@ bg3_status bg3_loca_writer_write_file(bg3_loca_writer* writer, char const* path)
     return status;
   }
   bg3_loca_header header = {
-      .magic = LOCA_MAGIC,
+      .magic = LIBBG3_LOCA_MAGIC,
       .num_entries = (uint32_t)(writer->entries.size / sizeof(bg3_loca_reader_entry_raw)),
       .heap_offset = (uint32_t)(sizeof(bg3_loca_header) + writer->entries.size),
   };
@@ -3648,10 +3628,10 @@ bg3_status bg3_patch_file_init(bg3_patch_file* file, char* data, size_t data_len
     return bg3_error_failed;
   }
   bg3_cursor_read(&c, &file->header, sizeof(bg3_patch_header));
-  if (file->header.magic != PATCH_MAGIC) {
+  if (file->header.magic != LIBBG3_PATCH_MAGIC) {
     return bg3_error_failed;
   }
-  if (file->header.version != PATCH_VERSION) {
+  if (file->header.version != LIBBG3_PATCH_VERSION) {
     // there are still some non-robust patch files present, but I have
     // not found one that appears to actually be _used_. implement if needed
     return bg3_error_failed;
@@ -3830,7 +3810,7 @@ static bool granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
   }
   size_t pos = 0;
   while (pos < input_len) {
-    size_t chunk_size = MIN(input_len - pos, GRANNY_BITKNIT_CHUNK);
+    size_t chunk_size = LIBBG3_MIN(input_len - pos, LIBBG3_GRANNY_BITKNIT_CHUNK);
     if (!ops->decompress_incremental(context, chunk_size, input + pos)) {
       ok = false;
       break;
@@ -3854,11 +3834,12 @@ bg3_status granny_reader_init(bg3_granny_reader* reader,
     return bg3_error_failed;
   }
   bg3_cursor_read(&c, &reader->magic, sizeof(bg3_granny_magic));
-  if (reader->magic.lo != GRANNY_MAGIC_LO || reader->magic.hi != GRANNY_MAGIC_HI) {
+  if (reader->magic.lo != LIBBG3_GRANNY_MAGIC_LO ||
+      reader->magic.hi != LIBBG3_GRANNY_MAGIC_HI) {
     return bg3_error_failed;
   }
   bg3_cursor_read(&c, &reader->header, sizeof(bg3_granny_header));
-  if (reader->header.format_version != GRANNY_VERSION) {
+  if (reader->header.format_version != LIBBG3_GRANNY_VERSION) {
     return bg3_error_failed;
   }
   size_t section_offset = reader->header.section_table + sizeof(bg3_granny_magic);
@@ -4147,7 +4128,7 @@ uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf) {
 
 void bg3_ibuf_push_align(bg3_indent_buffer* buf) {
   // TODO: this doesn't account for utf8 extended grapheme whatevers
-  bg3_ibuf_push(buf, buf->line_len - MIN(buf->line_len, bg3_ibuf_get_indent(buf)));
+  bg3_ibuf_push(buf, buf->line_len - LIBBG3_MIN(buf->line_len, bg3_ibuf_get_indent(buf)));
 }
 
 void bg3_ibuf_push(bg3_indent_buffer* buf, uint32_t width) {
@@ -4203,7 +4184,7 @@ static const size_t offset_granny_begin_file_decompression = 0x516a38;
 static const size_t offset_granny_decompress_incremental = 0x516a3c;
 static const size_t offset_granny_end_file_decompression = 0x516a40;
 
-#define GRANNY_OP(name) \
+#define LIBBG3_GRANNY_OP(name) \
   .name = (fn_granny_##name*)((char*)info.dli_fbase + offset_granny_##name)
 
 static void print_granny_type(granny_type_info* info, int indent) {
@@ -4246,10 +4227,10 @@ bg3_status do_granny(int argc, char const** argv) {
     return bg3_error_failed;
   }
   granny_compressor_ops compress_ops = {
-      GRANNY_OP(decompress_data),
-      GRANNY_OP(begin_file_decompression),
-      GRANNY_OP(decompress_incremental),
-      GRANNY_OP(end_file_decompression),
+      LIBBG3_GRANNY_OP(decompress_data),
+      LIBBG3_GRANNY_OP(begin_file_decompression),
+      LIBBG3_GRANNY_OP(decompress_incremental),
+      LIBBG3_GRANNY_OP(end_file_decompression),
   };
   if (argc < 2) {
     fprintf(stderr, "syntax: %s <.gr2 path>\n", argv[0]);
@@ -4493,7 +4474,7 @@ static void index_symtab_enter_string(index_symtab* symtab,
       .prev_idx = PACK_SYMVAL(symval),
       .next_idx = PACK_SYMVAL(symval),
   };
-  array_push((bg3_arena*)symtab->lookup.user_data, symtab, entries, entry);
+  LIBBG3_ARRAY_PUSH((bg3_arena*)symtab->lookup.user_data, symtab, entries, entry);
   bg3_hash_entry* existing;
   if (!bg3_hash_try_set(&symtab->lookup, str, symval, &existing)) {
     index_symtab_link_symbols(global, existing->value, symval);
@@ -4512,7 +4493,8 @@ static void index_symtab_enter_attr(index_symtab* symtab,
   if (attr_idx_in_node > 255) {
     return;
   }
-  bool is_wide = IS_SET(reader->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
+  bool is_wide =
+      LIBBG3_IS_SET(reader->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
   uint32_t item_val = (node_idx << 8) | attr_idx;
   size_t offset = is_wide ? attr->value : reader->value_offsets[attr_idx];
   char* raw_attr = reader->value_table_raw + offset;
@@ -4528,7 +4510,7 @@ static void index_symtab_enter_attr(index_symtab* symtab,
       uint32_t string_len;
       memcpy(&version, raw_attr, sizeof(uint16_t));
       memcpy(&string_len, raw_attr + 2, sizeof(uint32_t));
-      string_len = MIN(string_len, 47);
+      string_len = LIBBG3_MIN(string_len, 47);
       memcpy(tmpbuf, raw_attr + 6, string_len);
       tmpbuf[string_len] = 0;
       if (*tmpbuf == 'h') {
@@ -4570,7 +4552,7 @@ static int index_worker(bg3_parallel_for_thread* tcb) {
                 .name =
                     bg3_arena_sprintf(&local->tmp, "%s/%s", global->argv[i], de->d_name),
             };
-            array_push(&local->tmp, global, paks, work);
+            LIBBG3_ARRAY_PUSH(&local->tmp, global, paks, work);
           }
         }
         closedir(dir);
@@ -4597,7 +4579,7 @@ static int index_worker(bg3_parallel_for_thread* tcb) {
         if (bg3_strcasesuffix(entry->name, ".lsf") ||
             bg3_strcasesuffix(entry->name, ".loca")) {
           index_work_item work = {.pak_idx = (size_t)i, .entry = entry};
-          array_push(&local->tmp, local, items, work);
+          LIBBG3_ARRAY_PUSH(&local->tmp, local, items, work);
         }
       }
     }
@@ -4628,7 +4610,7 @@ static int index_worker(bg3_parallel_for_thread* tcb) {
     char* data = 0;
     size_t data_len = 0;
     bool owns_data = false;
-    if (LSPK_ENTRY_COMPRESSION_METHOD(entry->compression)) {
+    if (LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(entry->compression)) {
       if (bg3_lspk_file_extract(lspk, entry, 0, &data_len) != bg3_error_overflow) {
         goto file_out;
       }
@@ -4648,7 +4630,8 @@ static int index_worker(bg3_parallel_for_thread* tcb) {
         goto file_out;
       }
       bg3_lsof_reader_ensure_value_offsets(&reader);
-      bool is_wide = IS_SET(reader.header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
+      bool is_wide =
+          LIBBG3_IS_SET(reader.header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
       for (size_t node_idx = 0; node_idx < reader.num_nodes; ++node_idx) {
         bg3_lsof_node_wide node;
         bg3_lsof_reader_get_node(&reader, &node, node_idx);
@@ -4788,7 +4771,7 @@ bg3_status do_index(int argc, char const** argv) {
     fprintf(stderr, "syntax: %s <data path>... <index file>\n", argv[0]);
     return bg3_error_failed;
   }
-  int nthreads = MIN(128, 2 * bg3_parallel_for_ncpu());
+  int nthreads = LIBBG3_MIN(128, 2 * bg3_parallel_for_ncpu());
   index_global global = {.argc = argc, .argv = argv};
   global.threads = (index_per_thread*)alloca(sizeof(index_per_thread) * nthreads);
   memset(global.threads, 0, sizeof(index_per_thread) * nthreads);
@@ -4829,8 +4812,8 @@ bg3_status do_index(int argc, char const** argv) {
     return bg3_error_failed;
   }
   bg3_index_header* header = (bg3_index_header*)output.data;
-  header->magic = INDEX_MAGIC;
-  header->version = INDEX_VERSION;
+  header->magic = LIBBG3_INDEX_MAGIC;
+  header->version = LIBBG3_INDEX_VERSION;
   header->num_paks = global.num_paks;
   header->num_files = global.num_items;
   header->num_entries = entry_heap.size / sizeof(bg3_index_entry);
@@ -4862,10 +4845,10 @@ bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t da
     return bg3_error_bad_magic;
   }
   memcpy(&reader->header, data, sizeof(bg3_index_header));
-  if (reader->header.magic != INDEX_MAGIC) {
+  if (reader->header.magic != LIBBG3_INDEX_MAGIC) {
     return bg3_error_bad_magic;
   }
-  if (reader->header.version != INDEX_VERSION) {
+  if (reader->header.version != LIBBG3_INDEX_VERSION) {
     return bg3_error_bad_version;
   }
   reader->paks = (bg3_index_pak_entry*)(data + sizeof(bg3_index_header));
@@ -4918,7 +4901,8 @@ int do_find_worker(bg3_parallel_for_thread* tcb) {
   int nlen = strlen(local->needle);
   uint32_t chunk_size = local->reader->header.strings_len / tcb->thread_count;
   uint32_t offset = chunk_size * tcb->thread_num;
-  uint32_t end = MIN(local->reader->header.strings_len, offset + chunk_size + nlen);
+  uint32_t end =
+      LIBBG3_MIN(local->reader->header.strings_len, offset + chunk_size + nlen);
   char const* haystack = local->reader->strings + offset;
   int hlen = end - offset;
   int skip[256], i, j, k;
@@ -4939,7 +4923,7 @@ int do_find_worker(bg3_parallel_for_thread* tcb) {
       bg3_index_entry* entry = bg3_index_reader_find_entry(local->reader, offset + i + 1);
       assert(entry);
       if (offset + i + 1 <= entry->string_offset + entry->string_len) {
-        array_push(&local->tmp, local, entries, entry);
+        LIBBG3_ARRAY_PUSH(&local->tmp, local, entries, entry);
       }
       k += nlen;
     } else {
@@ -5020,10 +5004,10 @@ bg3_status bg3_aigrid_file_init(bg3_aigrid_file* file, char* data, size_t data_l
     return bg3_error_bad_version;
   }
   bg3_cursor_read(&file->c, &file->header, sizeof(bg3_aigrid_header));
-  if (file->header.version != AIGRID_VERSION) {
+  if (file->header.version != LIBBG3_AIGRID_VERSION) {
     return bg3_error_bad_version;
   }
-  bg3_cursor_read(&file->c, file->file_uuid, UUID_STRING_LEN);
+  bg3_cursor_read(&file->c, file->file_uuid, LIBBG3_UUID_STRING_LEN);
   bg3_cursor_read(&file->c, &file->num_subgrids, sizeof(uint32_t));
   file->cap_subgrids = file->num_subgrids;
   file->subgrids = (bg3_aigrid_subgrid*)bg3_arena_calloc(&file->alloc, file->num_subgrids,
@@ -5031,8 +5015,8 @@ bg3_status bg3_aigrid_file_init(bg3_aigrid_file* file, char* data, size_t data_l
   for (uint32_t i = 0; i < file->num_subgrids; ++i) {
     bg3_aigrid_subgrid* subgrid = file->subgrids + i;
     bg3_cursor_read(&file->c, &subgrid->header, sizeof(bg3_aigrid_subgrid_header));
-    bg3_cursor_read(&file->c, subgrid->object_uuid, UUID_STRING_LEN);
-    bg3_cursor_read(&file->c, subgrid->template_uuid, UUID_STRING_LEN);
+    bg3_cursor_read(&file->c, subgrid->object_uuid, LIBBG3_UUID_STRING_LEN);
+    bg3_cursor_read(&file->c, subgrid->template_uuid, LIBBG3_UUID_STRING_LEN);
     uint32_t uncompressed_len, compressed_len;
     bg3_cursor_read(&file->c, &uncompressed_len, sizeof(uncompressed_len));
     bg3_cursor_read(&file->c, &compressed_len, sizeof(compressed_len));
@@ -5084,7 +5068,7 @@ void bg3_aigrid_file_destroy(bg3_aigrid_file* file) {
 
 void bg3_aigrid_file_init_new(bg3_aigrid_file* file) {
   memset(file, 0, sizeof(bg3_aigrid_file));
-  file->header.version = AIGRID_VERSION;
+  file->header.version = LIBBG3_AIGRID_VERSION;
   bg3_arena_init(&file->alloc, 1024 * 1024, 1024);
 }
 
@@ -5119,10 +5103,10 @@ bg3_aigrid_subgrid* bg3_aigrid_file_create_subgrid(bg3_aigrid_file* file,
   };
   char tmpbuf[48];
   uuid_to_string(object_uuid, tmpbuf);
-  snprintf(sg.object_uuid, UUID_STRING_LEN, "%s", tmpbuf);
+  snprintf(sg.object_uuid, LIBBG3_UUID_STRING_LEN, "%s", tmpbuf);
   uuid_to_string(template_uuid, tmpbuf);
-  snprintf(sg.template_uuid, UUID_STRING_LEN, "%s", tmpbuf);
-  array_push(&file->alloc, file, subgrids, sg);
+  snprintf(sg.template_uuid, LIBBG3_UUID_STRING_LEN, "%s", tmpbuf);
+  LIBBG3_ARRAY_PUSH(&file->alloc, file, subgrids, sg);
   return &file->subgrids[file->num_subgrids - 1];
 }
 
@@ -5130,13 +5114,13 @@ bg3_status bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path) {
   bg3_status status = bg3_success;
   bg3_buffer out = {};
   bg3_buffer_push(&out, &file->header, sizeof(bg3_aigrid_header));
-  bg3_buffer_push(&out, file->file_uuid, UUID_STRING_LEN);
+  bg3_buffer_push(&out, file->file_uuid, LIBBG3_UUID_STRING_LEN);
   bg3_buffer_push(&out, &file->num_subgrids, sizeof(uint32_t));
   for (uint32_t i = 0; i < file->num_subgrids; ++i) {
     bg3_aigrid_subgrid* subgrid = file->subgrids + i;
     bg3_buffer_push(&out, &subgrid->header, sizeof(bg3_aigrid_subgrid_header));
-    bg3_buffer_push(&out, subgrid->object_uuid, UUID_STRING_LEN);
-    bg3_buffer_push(&out, subgrid->template_uuid, UUID_STRING_LEN);
+    bg3_buffer_push(&out, subgrid->object_uuid, LIBBG3_UUID_STRING_LEN);
+    bg3_buffer_push(&out, subgrid->template_uuid, LIBBG3_UUID_STRING_LEN);
     int src_size =
         sizeof(bg3_aigrid_tile) * subgrid->header.width * subgrid->header.height;
     int lz4_bound = LZ4_compressBound(src_size);
@@ -5488,8 +5472,8 @@ bg3_status bg3_osiris_save_init_binary(bg3_osiris_save* save,
   save->version = bg3_arena_strdup(&save->alloc, tmp.data);
   bg3_cursor_read(&save->c, &save->version_major, 1);
   bg3_cursor_read(&save->c, &save->version_minor, 1);
-  if (save->version_major != OSIRIS_VERSION_MAJOR ||
-      save->version_minor != OSIRIS_VERSION_MINOR) {
+  if (save->version_major != LIBBG3_OSIRIS_VERSION_MAJOR ||
+      save->version_minor != LIBBG3_OSIRIS_VERSION_MINOR) {
     bg3_osiris_save_destroy(save);
     bg3_buffer_destroy(&tmp);
     return bg3_error_failed;
@@ -5502,7 +5486,8 @@ bg3_status bg3_osiris_save_init_binary(bg3_osiris_save* save,
   bg3_cursor_read(&save->c, save->story_version, 0x80);
   bg3_cursor_read(&save->c, &save->debug_flags, sizeof(uint32_t));
   bg3_cursor_read(&save->c, &save->num_type_infos, sizeof(uint32_t));
-  save->string_mask = OSIRIS_STRING_MASK;  // i wonder if some middlebox caused this
+  save->string_mask =
+      LIBBG3_OSIRIS_STRING_MASK;  // i wonder if some middlebox caused this
   bg3_osiris_type_info* type_infos = (bg3_osiris_type_info*)bg3_arena_calloc(
       &save->alloc, save->num_type_infos, sizeof(bg3_osiris_type_info));
   for (uint32_t i = 0; i < save->num_type_infos; ++i) {
@@ -5878,7 +5863,7 @@ bg3_status bg3_osiris_save_write_binary(bg3_osiris_save* save, char const* path)
   osiris_save_put_u8(save, save->unk0);
   bg3_buffer_push(&save->out, save->story_version, 0x80);
   osiris_save_put_u32(save, save->debug_flags);
-  save->string_mask = OSIRIS_STRING_MASK;
+  save->string_mask = LIBBG3_OSIRIS_STRING_MASK;
   osiris_save_put_u32(save, save->num_type_infos);
   for (uint32_t i = 0; i < save->num_type_infos; ++i) {
     bg3_osiris_type_info* ti = save->type_infos + i;
@@ -6064,7 +6049,7 @@ static int get_adaptor_last_index(bg3_osiris_save* save, uint32_t adaptor_id) {
   bg3_osiris_rete_adaptor* a = save->rete_adaptors + (adaptor_id - 1);
   int max_index = -1;
   for (uint8_t i = 0; i < a->num_pairs; ++i) {
-    max_index = MAX(max_index, a->pairs[i].left);
+    max_index = LIBBG3_MAX(max_index, a->pairs[i].left);
   }
   return max_index;
 }
@@ -6080,8 +6065,8 @@ static int get_node_arity(bg3_osiris_save* save, bg3_osiris_rete_node* node) {
       return node->arity;
     case bg3_osiris_rete_node_join_and:
     case bg3_osiris_rete_node_join_and_not:
-      return MAX(get_adaptor_last_index(save, node->join.left_parent.adaptor),
-                 get_adaptor_last_index(save, node->join.right_parent.adaptor)) +
+      return LIBBG3_MAX(get_adaptor_last_index(save, node->join.left_parent.adaptor),
+                        get_adaptor_last_index(save, node->join.right_parent.adaptor)) +
              1;
     case bg3_osiris_rete_node_compare:
       return get_adaptor_last_index(save, node->compare.parent.adaptor) + 1;
@@ -6316,7 +6301,7 @@ static char const* osiris_goal_state_name(bg3_osiris_goal_state state) {
       "active",   "invalid1", "sleeping",   "invalid3",
       "invalid4", "invalid5", "finalising", "exited",
   };
-  return state < COUNT_OF(names) ? names[state] : "unknown";
+  return state < LIBBG3_COUNT_OF(names) ? names[state] : "unknown";
 }
 
 static void osiris_save_put_sexp_value(bg3_osiris_save* save, bg3_osiris_variant* value) {
@@ -6715,7 +6700,7 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
     bg3_ibuf_push(&save->text_out, 2);
     for (uint8_t j = 0; j < fi->num_params; ++j) {
       bg3_osiris_type_info* ti = save->type_infos + (fi->params[j] - 1);
-      if (fi->out_mask & OSIRIS_OUT_PARAM_MASK(j)) {
+      if (fi->out_mask & LIBBG3_OSIRIS_OUT_PARAM_MASK(j)) {
         bg3_ibuf_printf(&save->text_out, " (out %s)", ti->name);
       } else {
         bg3_ibuf_printf(&save->text_out, " %s", ti->name);
@@ -6837,7 +6822,7 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
 }
 
 static uint64_t symtab_hash_fn(void* key, void* user_data) {
-  size_t len = MIN(strlen((char*)key), 64);
+  size_t len = LIBBG3_MIN(strlen((char*)key), 64);
   char* buf = (char*)alloca(len);
   for (size_t i = 0; i < len; ++i) {
     buf[i] = tolower(((char*)key)[i]);
@@ -6868,7 +6853,7 @@ const bg3_hash_ops symtab_hash_ops = {
 };
 
 static uint64_t symtab_case_hash_fn(void* key, void* user_data) {
-  size_t len = MIN(strlen((char const*)key), 64);
+  size_t len = LIBBG3_MIN(strlen((char const*)key), 64);
   return XXH64(key, len, 0);
 }
 
@@ -6952,7 +6937,7 @@ static bg3_status enter_function(bg3_osiris_save_builder* builder,
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_function, new_index))) {
     return bg3_error_failed;
   }
-  array_push(&builder->save.alloc, &builder->save, functions, *fn);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, functions, *fn);
   return bg3_success;
 }
 
@@ -6973,7 +6958,7 @@ static bg3_status enter_type_info(bg3_osiris_save_builder* builder,
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_type, new_index))) {
     return bg3_error_failed;
   }
-  array_push(&builder->save.alloc, &builder->save, type_infos, *ti);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, *ti);
   return bg3_success;
 }
 
@@ -6994,7 +6979,7 @@ static bg3_status enter_goal(bg3_osiris_save_builder* builder,
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_goal, new_index))) {
     return bg3_error_failed;
   }
-  array_push(&builder->save.alloc, &builder->save, goals, *goal);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, goals, *goal);
   return bg3_success;
 }
 
@@ -7027,11 +7012,11 @@ void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder) {
   enter_global(builder, "REAL", MAKE_SYMBOL_VALUE(symtype_type, 3));
   enter_global(builder, "STRING", MAKE_SYMBOL_VALUE(symtype_type, 4));
   enter_global(builder, "GUIDSTRING", MAKE_SYMBOL_VALUE(symtype_type, 5));
-  array_push(&builder->save.alloc, &builder->save, type_infos, builtin_integer);
-  array_push(&builder->save.alloc, &builder->save, type_infos, builtin_integer64);
-  array_push(&builder->save.alloc, &builder->save, type_infos, builtin_real);
-  array_push(&builder->save.alloc, &builder->save, type_infos, builtin_string);
-  array_push(&builder->save.alloc, &builder->save, type_infos, builtin_guidstring);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_integer);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_integer64);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_real);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_string);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, type_infos, builtin_guidstring);
   enter_global(builder, "=",
                MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_equal));
   enter_global(builder,
@@ -7086,7 +7071,7 @@ static bg3_status parse_defun(bg3_osiris_save_builder* builder,
     bg3_osiris_type_info* ti;
     // out param
     if (l->next.type == bg3_sexp_token_type_lparen) {
-      fn.out_mask |= OSIRIS_OUT_PARAM_MASK(fn.num_params);
+      fn.out_mask |= LIBBG3_OSIRIS_OUT_PARAM_MASK(fn.num_params);
       SLURP(lparen);
       MATCH(symbol);
       if (strcmp(l->next.text.data, "out")) {
@@ -7112,7 +7097,7 @@ static bg3_status parse_defun(bg3_osiris_save_builder* builder,
       }
       SLURP(symbol);
     }
-    array_push(&builder->save.alloc, &fn, params, ti->index);
+    LIBBG3_ARRAY_PUSH(&builder->save.alloc, &fn, params, ti->index);
     if (fn.num_params > 31) {
       fprintf(stderr, "too many function parameters at line %d\n", l->next.line);
       return bg3_error_failed;
@@ -7176,7 +7161,7 @@ static bg3_status parse_argument(bg3_osiris_save_builder* builder,
     void* localsym;
     if ((status = lookup_local(builder, l->next.text.data, &localsym))) {
       if (allow_fresh_vars) {
-        if (builder->next_var == OSIRIS_MAX_LOCALS) {
+        if (builder->next_var == LIBBG3_OSIRIS_MAX_LOCALS) {
           fprintf(stderr, "too many local vars at line %d\n", l->next.line);
           return bg3_error_failed;
         }
@@ -7382,7 +7367,7 @@ static bg3_status parse_action_list(bg3_osiris_save_builder* builder,
   bg3_status status = bg3_success;
   while (!status && l->next.type != bg3_sexp_token_type_rparen) {
     bg3_osiris_action action = {};
-    uint32_t binding_lines[OSIRIS_MAX_LOCALS];
+    uint32_t binding_lines[LIBBG3_OSIRIS_MAX_LOCALS];
     void* symval;
     SLURP(lparen);
     MATCH(symbol);
@@ -7395,14 +7380,14 @@ static bg3_status parse_action_list(bg3_osiris_save_builder* builder,
     SLURP(symbol);
     while (!status && l->next.type != bg3_sexp_token_type_rparen) {
       bg3_osiris_binding binding = {};
-      if (action.num_arguments == OSIRIS_MAX_LOCALS) {
+      if (action.num_arguments == LIBBG3_OSIRIS_MAX_LOCALS) {
         fprintf(stderr, "too many arguments at line %d\n", l->next.line);
         return bg3_error_failed;
       }
       binding_lines[action.num_arguments] = l->next.line;
       status = parse_argument(builder, l, &binding, false);
       if (!status) {
-        array_push(&builder->save.alloc, &action, arguments, binding);
+        LIBBG3_ARRAY_PUSH(&builder->save.alloc, &action, arguments, binding);
       }
     }
     if (status) {
@@ -7436,7 +7421,7 @@ static bg3_status parse_action_list(bg3_osiris_save_builder* builder,
       action.function = fn->name;
       fn->num_actions++;
     }
-    array_push(&builder->save.alloc, alist, actions, action);
+    LIBBG3_ARRAY_PUSH(&builder->save.alloc, alist, actions, action);
     SLURP(rparen);
   }
   SLURP(rparen);
@@ -7455,9 +7440,9 @@ typedef struct condition {
   condition_type type;
   uint32_t line;
   uint32_t num_bindings;
-  bg3_osiris_binding bindings[OSIRIS_MAX_LOCALS];
-  uint32_t binding_lines[OSIRIS_MAX_LOCALS];
-  bool debug_copied_down[OSIRIS_MAX_LOCALS];
+  bg3_osiris_binding bindings[LIBBG3_OSIRIS_MAX_LOCALS];
+  uint32_t binding_lines[LIBBG3_OSIRIS_MAX_LOCALS];
+  bool debug_copied_down[LIBBG3_OSIRIS_MAX_LOCALS];
   bool negated;
   bg3_osiris_compare_op compare_op;
   bg3_osiris_function_info* predicate;
@@ -7488,7 +7473,7 @@ static bg3_status parse_condition(bg3_osiris_save_builder* builder,
   }
   SLURP(symbol);
   while (!status && l->next.type != bg3_sexp_token_type_rparen) {
-    if (cond->num_bindings == OSIRIS_MAX_LOCALS) {
+    if (cond->num_bindings == LIBBG3_OSIRIS_MAX_LOCALS) {
       fprintf(stderr, "too many arguments to condition at line %d\n", l->next.line);
       return bg3_error_failed;
     }
@@ -7603,9 +7588,9 @@ static bg3_status ensure_entry_node(bg3_osiris_save_builder* builder,
       size_t sz = db.num_schema_columns * sizeof(uint16_t);
       db.schema_columns = (uint16_t*)bg3_arena_alloc(&builder->save.alloc, sz);
       memcpy(db.schema_columns, cond->predicate->params, sz);
-      array_push(&builder->save.alloc, &builder->save, dbs, db);
+      LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, dbs, db);
     }
-    array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
+    LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, rete_nodes, node);
     cond->predicate->rete_node = node.node_id;
   }
   cond->node_id = cond->predicate->rete_node;
@@ -7631,8 +7616,8 @@ static uint32_t create_adaptor(bg3_osiris_save_builder* builder,
     } else {
       adaptor.vars[i] = b->index;
       adaptor.num_pairs++;
-      output->num_bindings = MAX(b->index + 1, output->num_bindings);
-      assert(output->num_bindings <= OSIRIS_MAX_LOCALS);
+      output->num_bindings = LIBBG3_MAX(b->index + 1, output->num_bindings);
+      assert(output->num_bindings <= LIBBG3_OSIRIS_MAX_LOCALS);
       output->bindings[b->index] = *b;
       output->debug_copied_down[b->index] = true;
     }
@@ -7657,7 +7642,7 @@ static uint32_t create_adaptor(bg3_osiris_save_builder* builder,
       next_pair++;
     }
   }
-  array_push(&builder->save.alloc, &builder->save, rete_adaptors, adaptor);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, rete_adaptors, adaptor);
   return adaptor.adaptor_id;
 }
 
@@ -7678,7 +7663,7 @@ static void link_parent(bg3_osiris_save_builder* builder,
     case bg3_osiris_rete_node_div_query:
     case bg3_osiris_rete_node_sys_query:
     case bg3_osiris_rete_node_query:
-      array_push(&builder->save.alloc, &parent->trigger, children, edge);
+      LIBBG3_ARRAY_PUSH(&builder->save.alloc, &parent->trigger, children, edge);
       break;
     case bg3_osiris_rete_node_join_and:
     case bg3_osiris_rete_node_join_and_not:
@@ -7705,7 +7690,7 @@ static void create_temp_db(bg3_osiris_save_builder* builder,
     assert(cond->bindings[i].value.index != 0);
     db.schema_columns[i] = cond->bindings[i].value.index;
   }
-  array_push(&builder->save.alloc, &builder->save, dbs, db);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, dbs, db);
 }
 
 // TODO: this is less efficient than forward calculating because we're doing a
@@ -7845,7 +7830,7 @@ static bg3_status create_terminal_node(bg3_osiris_save_builder* builder,
   calc_db_edges(builder, &node, &node.terminal.parent.db_node,
                 &node.terminal.parent.db_edge, &node.terminal.parent.db_distance, 0, 0,
                 0);
-  array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, rete_nodes, node);
   *last = terminal_cond;
   return bg3_success;
 }
@@ -7886,7 +7871,7 @@ static bg3_status create_compare_node(bg3_osiris_save_builder* builder,
   }
   calc_db_edges(builder, &node, &node.compare.parent.db_node,
                 &node.compare.parent.db_edge, &node.compare.parent.db_distance, 0, 0, 0);
-  array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, rete_nodes, node);
   *prev = compare_cond;
   return bg3_success;
 }
@@ -7928,7 +7913,7 @@ static bg3_status create_join_node(bg3_osiris_save_builder* builder,
                 &node.join.left_parent.db_edge, &node.join.left_parent.db_distance,
                 &node.join.right_parent.db_node, &node.join.right_parent.db_edge,
                 &node.join.right_parent.db_distance);
-  array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
+  LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, rete_nodes, node);
   *left = join_cond;
   return bg3_success;
 }
@@ -8152,9 +8137,9 @@ static bg3_status parse_toplevel(bg3_osiris_save_builder* builder, bg3_sexp_lexe
       entry.value = l->next.int_val;
       SLURP(integer);
       SLURP(rparen);
-      array_push(&builder->save.alloc, &enum_info, entries, entry);
+      LIBBG3_ARRAY_PUSH(&builder->save.alloc, &enum_info, entries, entry);
     }
-    array_push(&builder->save.alloc, &builder->save, enums, enum_info);
+    LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, enums, enum_info);
     SLURP(rparen);
   } else if (!strcmp(l->next.text.data, "defstory")) {
     SLURP(symbol);
@@ -8218,8 +8203,8 @@ bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder) {
       size_t sz = db.num_schema_columns * sizeof(uint16_t);
       db.schema_columns = (uint16_t*)bg3_arena_alloc(&builder->save.alloc, sz);
       memcpy(db.schema_columns, fi->params, sz);
-      array_push(&builder->save.alloc, &builder->save, dbs, db);
-      array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
+      LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, dbs, db);
+      LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, rete_nodes, node);
       fi->rete_node = node.node_id;
     }
   }
@@ -8234,7 +8219,7 @@ bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder) {
         return bg3_error_failed;
       }
       g->parent = parent->goal_id;
-      array_push(&builder->save.alloc, parent, children, g->goal_id);
+      LIBBG3_ARRAY_PUSH(&builder->save.alloc, parent, children, g->goal_id);
       g->unresolved_parent = 0;
     }
   }
