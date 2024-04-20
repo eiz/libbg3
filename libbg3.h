@@ -1,3 +1,5 @@
+// libbg3
+//
 // Copyright (C) 2024 Mackenzie Straight.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,6 +35,13 @@
 #define LIBBG3_CONFIG_ENABLE_BCDEC 0
 #endif
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_MAC
+#define LIBBG3_PLATFORM_MACOS
+#endif
+#endif
+
 #include <assert.h>
 #include <inttypes.h>
 #include <stdarg.h>
@@ -44,13 +53,6 @@
 #include <string.h>
 
 #include <pthread.h>
-
-#ifdef __APPLE__
-#include <TargetConditionals.h>
-#if TARGET_OS_MAC
-#define LIBBG3_PLATFORM_MACOS
-#endif
-#endif
 
 #ifdef __cplusplus
 extern "C" {
