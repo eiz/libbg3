@@ -27,6 +27,12 @@
 #endif
 #endif
 
+// Set to 1 to enable bcdec integration. Currently only used for dumping
+// debugging info about patch files.
+#ifndef LIBBG3_CONFIG_ENABLE_BCDEC
+#define LIBBG3_CONFIG_ENABLE_BCDEC 0
+#endif
+
 #include <assert.h>
 #include <inttypes.h>
 #include <stdarg.h>
@@ -38,6 +44,13 @@
 #include <string.h>
 
 #include <pthread.h>
+
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_MAC
+#define LIBBG3_PLATFORM_MACOS
+#endif
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -1123,6 +1136,11 @@ typedef struct bg3_granny_reader {
   bg3_granny_section* sections;
 } bg3_granny_reader;
 
+bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
+                                  char* data,
+                                  size_t data_len,
+                                  bg3_granny_compressor_ops* compressor_ops);
+
 // sexp lexer
 
 typedef enum bg3_sexp_token_type {
@@ -1881,7 +1899,7 @@ bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder);
 #include "miniz.h"
 #include "xxhash.h"
 
-#ifdef BG3DO_PLATFORM_MACOS
+#ifdef LIBBG3_PLATFORM_MACOS
 #include <arm_neon.h>
 #include <sys/sysctl.h>
 #endif
@@ -1910,8 +1928,8 @@ static bool uuid_parse(bg3_uuid* id, char const* buf) {
                      &id->half[5]);
 }
 
-#ifdef BG3DO_PLATFORM_MACOS
-void uuid_to_string_neon(uuid const* id, char out[48]) {
+#ifdef LIBBG3_PLATFORM_MACOS
+void bg3_uuid_to_string_neon(bg3_uuid const* id, char out[48]) {
   static const uint8_t hex_table[17] = "0123456789abcdef";
   static const uint8_t shuffle0[16] = {
       6, 7, 4, 5, 2, 3, 0, 1, 10, 11, 8, 9, 14, 15, 12, 13,
@@ -1948,11 +1966,11 @@ void uuid_to_string_neon(uuid const* id, char out[48]) {
   vst1q_u8((uint8_t*)out + 32, dashed_right);
 }
 
-void uuid_to_string(uuid const* id, char out[48]) {
-  uuid_to_string_neon(id, out);
+void bg3_uuid_to_string(bg3_uuid const* id, char out[48]) {
+  bg3_uuid_to_string_neon(id, out);
 }
-#else  // BG3DO_PLATFORM_MACOS
-void uuid_to_string(bg3_uuid const* id, char out[48]) {
+#else  // LIBBG3_PLATFORM_MACOS
+void bg3_uuid_to_string(bg3_uuid const* id, char out[48]) {
   memset(out, 0, 48);
   snprintf(out, 48, "%08x-%04hx-%04hx-%04hx-%04hx%04hx%04hx\n", id->word, id->half[0],
            id->half[1], id->half[2], id->half[3], id->half[4], id->half[5]);
@@ -2065,12 +2083,7 @@ static void* do_parallel_for(void* arg) {
 
 static int ncpu = 1;
 void __attribute__((constructor)) parallel_for_init() {
-#ifdef BG3DO_PLATFORM_MAC
-  size_t len = sizeof(ncpu);
-  sysctlbyname("hw.ncpu", &ncpu, &len, 0, 0);
-#else
   ncpu = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
 }
 
 int bg3_parallel_for_ncpu() {
@@ -2573,83 +2586,6 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
       memcpy(dest, file->mapped->data + entry_offset, entry->compressed_size);
       break;
   }
-  return bg3_success;
-}
-
-// TODO: this is a totally shitty first pass version. don't care.
-// stuff it ought to do:
-//  - compression
-//  - split archives
-//  - parallelization
-//  - directory scan instead of manifest txt
-//  - be an api
-int do_pack(int argc, char const** argv) {
-  if (argc < 3) {
-    fprintf(stderr, "syntax: %s <list-file> <pak-file>\n", argv[0]);
-    return -1;
-  }
-  FILE* listfp = fopen(argv[1], "r");
-  if (!listfp) {
-    perror("fopen");
-    return -1;
-  }
-  FILE* pakfp = fopen(argv[2], "wb");
-  if (!pakfp) {
-    perror("fopen");
-    fclose(listfp);
-    return -1;
-  }
-  bg3_buffer manifest_buf;
-  bg3_buffer_init(&manifest_buf);
-  bg3_lspk_header file_header;
-  bg3_lspk_manifest_header manifest_header;
-  manifest_header.num_files = 0;
-  manifest_header.compressed_size = 0;
-  memset(&file_header, 0, sizeof(bg3_lspk_header));
-  file_header.magic = LIBBG3_LSPK_MAGIC;
-  file_header.version = LIBBG3_LSPK_VERSION;
-  file_header.num_parts = 1;
-  file_header.priority = 127;
-  fwrite(&file_header, sizeof(bg3_lspk_header), 1, pakfp);
-  char line[1024];
-  uint64_t file_offset = sizeof(bg3_lspk_header);
-  while (fgets(line, 1024, listfp)) {
-    size_t line_len = strlen(line);
-    if (line_len > 0) {
-      line[line_len - 1] = '\0';
-    }
-    bg3_lspk_manifest_entry entry;
-    snprintf(entry.name, sizeof(entry.name), "%s", line);
-    bg3_mapped_file input_file;
-    if (bg3_mapped_file_init_ro(&input_file, entry.name) < 0) {
-      fprintf(stderr, "failed to open %s\n", entry.name);
-      continue;
-    }
-    entry.offset_lo = file_offset & 0xFFFFFFFF;
-    entry.offset_hi = file_offset >> 32;
-    entry.part_num = 0;
-    entry.compression = 0;
-    entry.compressed_size = input_file.data_len;
-    entry.uncompressed_size = 0;
-    bg3_buffer_push(&manifest_buf, &entry, sizeof(entry));
-    fwrite(input_file.data, input_file.data_len, 1, pakfp);
-    manifest_header.num_files++;
-    bg3_mapped_file_destroy(&input_file);
-    file_offset += input_file.data_len;
-  }
-  size_t compress_buf_size = LZ4_compressBound(manifest_buf.size);
-  char* compress_buf = (char*)malloc(compress_buf_size);
-  manifest_header.compressed_size = LZ4_compress_default(
-      manifest_buf.data, compress_buf, manifest_buf.size, compress_buf_size);
-  file_header.manifest_offset = file_offset;
-  file_header.manifest_size = manifest_header.compressed_size + sizeof(manifest_header);
-  fwrite(&manifest_header, sizeof(manifest_header), 1, pakfp);
-  fwrite(compress_buf, manifest_header.compressed_size, 1, pakfp);
-  bg3_buffer_destroy(&manifest_buf);
-  fseek(pakfp, 0, SEEK_SET);
-  fwrite(&file_header, sizeof(file_header), 1, pakfp);
-  fclose(pakfp);
-  fclose(listfp);
   return bg3_success;
 }
 
@@ -3836,10 +3772,10 @@ static bool granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
   return ok;
 }
 
-bg3_status granny_reader_init(bg3_granny_reader* reader,
-                              char* data,
-                              size_t data_len,
-                              bg3_granny_compressor_ops* compressor_ops) {
+bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
+                                  char* data,
+                                  size_t data_len,
+                                  bg3_granny_compressor_ops* compressor_ops) {
   memset(reader, 0, sizeof(bg3_granny_reader));
   reader->data = data;
   reader->data_len = data_len;
@@ -4192,182 +4128,6 @@ void bg3_ibuf_printf(bg3_indent_buffer* buf, char const* fmt, ...) {
   va_end(ap);
 }
 
-#ifdef BG3DO_PLATFORM_MACOS
-// TODO: scan for these.
-static const size_t offset_granny_decompress_data = 0x516a30;
-static const size_t offset_granny_begin_file_decompression = 0x516a38;
-static const size_t offset_granny_decompress_incremental = 0x516a3c;
-static const size_t offset_granny_end_file_decompression = 0x516a40;
-
-#define LIBBG3_GRANNY_OP(name) \
-  .name = (fn_granny_##name*)((char*)info.dli_fbase + offset_granny_##name)
-
-static void print_granny_type(granny_type_info* info, int indent) {
-  granny_type_info* first = info;
-  while (info->type) {
-    for (int i = 0; i < indent; ++i) {
-      putchar(' ');
-    }
-    if (info->num_elements) {
-      printf("%02d %s[%d]\n", info->type, info->name, info->num_elements);
-    } else {
-      printf("%02d %s\n", info->type, info->name);
-    }
-    if (info->tags[0] || info->tags[1] || info->tags[2]) {
-      for (int i = 0; i < indent; ++i) {
-        putchar(' ');
-      }
-      printf("  tags %08X %08X %08X\n", info->tags[0], info->tags[1], info->tags[2]);
-    }
-    if (info->reference_type) {
-      granny_data_type prev_type = first->type;
-      first->type = bg3_granny_dt_end;
-      print_granny_type(info->reference_type, indent + 2);
-      first->type = prev_type;
-    }
-    info++;
-  }
-}
-
-bg3_status do_granny(int argc, char const** argv) {
-  void* handle = dlopen("/Users/eiz/l/bg3/MacOS/Baldur's Gate 3", RTLD_LAZY | RTLD_LOCAL);
-  if (!handle) {
-    printf("couldn't find bg3\n");
-    return bg3_error_failed;
-  }
-  void* ptr = dlsym(handle, "_ZN2ls9SingletonINS_11FileManagerEE5m_ptrE");
-  Dl_info info;
-  if (!ptr || !dladdr(ptr, &info)) {
-    printf("couldn't find an export (use _dyld_* fns instead lol)\n");
-    return bg3_error_failed;
-  }
-  granny_compressor_ops compress_ops = {
-      LIBBG3_GRANNY_OP(decompress_data),
-      LIBBG3_GRANNY_OP(begin_file_decompression),
-      LIBBG3_GRANNY_OP(decompress_incremental),
-      LIBBG3_GRANNY_OP(end_file_decompression),
-  };
-  if (argc < 2) {
-    fprintf(stderr, "syntax: %s <.gr2 path>\n", argv[0]);
-    return bg3_error_failed;
-  }
-  mapped_file mapped;
-  granny_reader reader;
-  if (mapped_file_init_ro(&mapped, argv[1])) {
-    fprintf(stderr, "failed to open file\n");
-    return bg3_error_failed;
-  }
-  if (granny_reader_init(&reader, mapped.data, mapped.data_len, &compress_ops)) {
-    fprintf(stderr, "failed to load granny file\n");
-    return bg3_error_failed;
-  }
-  printf("root type %08X:%08X\n", reader.header.root_type.section,
-         reader.header.root_type.offset);
-  printf("root obj %08X:%08X\n", reader.header.root_obj.section,
-         reader.header.root_obj.offset);
-  for (int i = 0; i < reader.header.num_sections; ++i) {
-    printf("section %d\n", i);
-    printf("  num_fixups %d num_mixed_marshals %d\n",
-           reader.section_headers[i].num_fixups,
-           reader.section_headers[i].num_mixed_marshals);
-    printf("  fixups_offset %08X\n", reader.section_headers[i].fixups_offset);
-  }
-  cursor c;
-  granny_section_ptr root_type = reader.header.root_type;
-  granny_section* section = &reader.sections[root_type.section];
-  cursor_init(&c, section->data, section->data_len);
-  cursor_seek(&c, root_type.offset);
-  print_granny_type((granny_type_info*)c.ptr, 0);
-  granny_obj_root* root =
-      (granny_obj_root*)(reader.sections[reader.header.root_obj.section].data +
-                         reader.header.root_obj.offset);
-  printf("From file: %s\n", root->from_file_name);
-  printf("Extended data: %p\n", root->extended_data.obj);
-  if (root->art_tool_info) {
-    printf("Art tool: %s\n", root->art_tool_info->from_art_tool_name);
-  }
-  printf(
-      "num_textures %d num_materials %d num_skeletons %d num_vertex_datas "
-      "%d\n",
-      root->num_textures, root->num_materials, root->num_skeletons,
-      root->num_vertex_datas);
-  printf(
-      "num_tri_topologies %d num_meshes %d num_models %d num_track_groups "
-      "%d\n",
-      root->num_tri_topologies, root->num_meshes, root->num_models,
-      root->num_track_groups);
-  printf("num_animations %d\n", root->num_animations);
-  for (int i = 0; i < root->num_skeletons; ++i) {
-    printf("skeleton %s with %d bones\n", root->skeletons[i]->name,
-           root->skeletons[i]->num_bones);
-    printf("  ext %p\n", root->skeletons[i]->extended_data.obj);
-    for (int j = 0; j < root->skeletons[i]->num_bones; ++j) {
-      granny_obj_bone* bone = &root->skeletons[i]->bones[j];
-      printf("  bone %s\n", bone->name);
-      printf("    ext %p\n", bone->extended_data.obj);
-    }
-  }
-  for (int i = 0; i < root->num_meshes; ++i) {
-    printf("mesh %s\n", root->meshes[i]->name);
-    printf("  ext %p\n", root->meshes[i]->extended_data.obj);
-    if (root->meshes[i]->extended_data.obj) {
-      granny_obj_ls_mesh* ls_mesh =
-          (granny_obj_ls_mesh*)root->meshes[i]->extended_data.obj;
-      granny_obj_ls_user_mesh_properties* props = ls_mesh->user_mesh_properties;
-      printf("    version %d\n", ls_mesh->lsm_version);
-      printf("    lod %d\n", props->lod);
-      printf("    num_format_descs %d\n", props->num_format_descs);
-      printf("    lod_distance %f\n", props->lod_distance);
-      printf("    is_impostor %d\n", props->is_impostor);
-      printf("    ext %p\n", props->extended_data.obj);
-      print_granny_type(root->meshes[i]->extended_data.type, 2);
-    }
-    char nbuf[1024];
-    snprintf(nbuf, 1024, "tmp/%s.obj", root->meshes[i]->name);
-    FILE* fp = fopen(nbuf, "wb");
-    if (!fp) {
-      abort();
-    }
-    granny_obj_vertex_data* vdata = root->meshes[i]->primary_vertex_data;
-    granny_obj_tri_topology* topo = root->meshes[i]->primary_topology;
-    printf("  vertices %p %d\n", vdata->vertices.items, vdata->vertices.num_items);
-    printf("  indices %p %d indices16 %p %d\n", topo->indices, topo->num_indices,
-           topo->indices16, topo->num_indices16);
-    granny_obj_ls_vertex* vertices = (granny_obj_ls_vertex*)vdata->vertices.items;
-    for (int32_t j = 0; j < vdata->vertices.num_items; ++j) {
-      granny_obj_ls_vertex v = vertices[j];
-      fprintf(fp, "v %f %f %f\n", v.position[0], v.position[1], v.position[2]);
-    }
-    for (int32_t j = 0; j < topo->num_indices16; j += 3) {
-      fprintf(fp, "f %d %d %d\n", topo->indices16[j] + 1, topo->indices16[j + 1] + 1,
-              topo->indices16[j + 2] + 1);
-    }
-    for (int32_t j = 0; j < topo->num_indices; j += 3) {
-      fprintf(fp, "f %d %d %d\n", topo->indices[j] + 1, topo->indices[j + 1] + 1,
-              topo->indices[j + 2] + 1);
-    }
-    fclose(fp);
-#if 0
-        for (int32_t j = 0; j < vdata->vertices.num_items; ++j) {
-            granny_obj_ls_vertex v = vertices[j];
-            vec4 qt = {v.qtangent[0] / 32767.0, v.qtangent[1] / 32767.0,
-                       v.qtangent[2] / 32767.0, v.qtangent[3] / 32767.0};
-            mat4x4 rot;
-            mat4x4_from_quat(rot, qt);
-            vec3 norm = {rot[0][0], rot[0][1], rot[0][2]};
-            printf("pos (%f,%f,%f) norm (%f,%f,%f) mag %f uv (%f,%f)\n",
-                   v.position[0], v.position[1], v.position[2], rot[0][0],
-                   rot[0][1], rot[0][2], vec3_len(norm),
-                   (double)v.texture_coordinates0[0],
-                   (double)v.texture_coordinates0[1]);
-        }
-#endif
-    print_granny_type(vdata->vertices.type, 4);
-  }
-  return bg3_error_failed;
-}
-#endif
-
 typedef struct index_pak_work {
   char* name;
   bool failed;
@@ -4542,7 +4302,7 @@ static void index_symtab_enter_attr(index_symtab* symtab,
         break;
       }
       memcpy(&id, raw_attr, sizeof(id));
-      uuid_to_string(&id, tmpbuf);
+      bg3_uuid_to_string(&id, tmpbuf);
       index_symtab_enter_string(symtab, global, item_idx, thread_num, tmpbuf, false,
                                 item_val);
       break;
@@ -4783,7 +4543,8 @@ static int index_worker(bg3_parallel_for_thread* tcb) {
   return 0;
 }
 
-bg3_status do_index(int argc, char const** argv) {
+// TODO: make this into an api
+bg3_status index_build(int argc, char const** argv) {
   if (argc < 3) {
     fprintf(stderr, "syntax: %s <data path>... <index file>\n", argv[0]);
     return bg3_error_failed;
@@ -4903,103 +4664,6 @@ bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
   return 0;
 }
 
-typedef struct index_search_thread {
-  bg3_arena tmp;
-  bg3_index_reader* reader;
-  char const* needle;
-  size_t num_entries;
-  size_t cap_entries;
-  bg3_index_entry** entries;
-} index_search_thread;
-
-int do_find_worker(bg3_parallel_for_thread* tcb) {
-  index_search_thread* local = ((index_search_thread*)tcb->user_data) + tcb->thread_num;
-  char const* needle = local->needle;
-  int nlen = strlen(local->needle);
-  uint32_t chunk_size = local->reader->header.strings_len / tcb->thread_count;
-  uint32_t offset = chunk_size * tcb->thread_num;
-  uint32_t end =
-      LIBBG3_MIN(local->reader->header.strings_len, offset + chunk_size + nlen);
-  char const* haystack = local->reader->strings + offset;
-  int hlen = end - offset;
-  int skip[256], i, j, k;
-  if (!nlen || nlen > hlen) {
-    return (int)bg3_success;
-  }
-  for (i = 0; i < 256; ++i) {
-    skip[i] = nlen;
-  }
-  for (i = 0; i < nlen - 1; ++i) {
-    skip[needle[i] & 0xFF] = nlen - i - 1;
-  }
-  k = nlen - 1;
-  while (k < hlen) {
-    for (j = nlen - 1, i = k; j >= 0 && needle[j] == haystack[i]; --j, --i)
-      ;
-    if (j == -1) {
-      bg3_index_entry* entry = bg3_index_reader_find_entry(local->reader, offset + i + 1);
-      assert(entry);
-      if (offset + i + 1 <= entry->string_offset + entry->string_len) {
-        LIBBG3_ARRAY_PUSH(&local->tmp, local, entries, entry);
-      }
-      k += nlen;
-    } else {
-      k += skip[haystack[k] & 0xFF];
-    }
-  }
-  return (int)bg3_success;
-}
-
-bg3_status do_find(int argc, char const** argv) {
-  if (argc < 3) {
-    fprintf(stderr, "syntax: %s <index file> <search string>\n", argv[0]);
-    return bg3_error_failed;
-  }
-  bg3_mapped_file mapped;
-  if (bg3_mapped_file_init_ro(&mapped, argv[1])) {
-    perror("mapped_file_init_ro");
-    return bg3_error_libc;
-  }
-  bg3_index_reader reader;
-  if (bg3_index_reader_init(&reader, mapped.data, mapped.data_len)) {
-    fprintf(stderr, "woopsie\n");
-    return bg3_error_failed;
-  }
-  int nthreads = bg3_parallel_for_ncpu();
-  index_search_thread* threads =
-      (index_search_thread*)alloca(nthreads * sizeof(index_search_thread));
-  memset(threads, 0, sizeof(index_search_thread) * nthreads);
-  char* term = strdup(argv[2]);
-  for (char* p = term; *p; ++p) {
-    *p = tolower(*p);
-  }
-  for (int i = 0; i < nthreads; ++i) {
-    bg3_arena_init(&threads[i].tmp, 1024 * 1024, 1024);
-    threads[i].needle = term;
-    threads[i].reader = &reader;
-  }
-  bg3_parallel_for(do_find_worker, threads);
-  size_t num_entries = 0;
-  for (int i = 0; i < nthreads; ++i) {
-    for (size_t j = 0; j < threads[i].num_entries; ++j) {
-      bg3_index_entry* entry = threads[i].entries[j];
-      for (uint32_t k = 0; k < entry->match_len; ++k) {
-        bg3_index_match_entry* match = reader.matches + k + entry->match_index;
-        printf("%s\n", reader.files[match->file_idx].name);
-      }
-    }
-    num_entries += threads[i].num_entries;
-  }
-  printf("%zd matches\n", num_entries);
-  for (int i = 0; i < nthreads; ++i) {
-    bg3_arena_destroy(&threads[i].tmp);
-  }
-  free(term);
-  bg3_index_reader_destroy(&reader);
-  bg3_mapped_file_destroy(&mapped);
-  return bg3_success;
-}
-
 static uint32_t aigrid_uuid_hash(bg3_uuid* id) {
   union {
     bg3_uuid id;
@@ -5067,7 +4731,7 @@ bg3_status bg3_aigrid_file_init(bg3_aigrid_file* file, char* data, size_t data_l
     layer->entries = (bg3_aigrid_layer_entry*)bg3_arena_calloc(
         &file->alloc, layer->num_entries, sizeof(bg3_aigrid_layer));
     char tmpbuf[48];
-    uuid_to_string(&layer->level_template, tmpbuf);
+    bg3_uuid_to_string(&layer->level_template, tmpbuf);
     bg3_cursor_read(&file->c, layer->entries,
                     layer->num_entries * sizeof(bg3_aigrid_layer_entry));
   }
@@ -5119,9 +4783,9 @@ bg3_aigrid_subgrid* bg3_aigrid_file_create_subgrid(bg3_aigrid_file* file,
                                                   sizeof(bg3_aigrid_tile)),
   };
   char tmpbuf[48];
-  uuid_to_string(object_uuid, tmpbuf);
+  bg3_uuid_to_string(object_uuid, tmpbuf);
   snprintf(sg.object_uuid, LIBBG3_UUID_STRING_LEN, "%s", tmpbuf);
-  uuid_to_string(template_uuid, tmpbuf);
+  bg3_uuid_to_string(template_uuid, tmpbuf);
   snprintf(sg.template_uuid, LIBBG3_UUID_STRING_LEN, "%s", tmpbuf);
   LIBBG3_ARRAY_PUSH(&file->alloc, file, subgrids, sg);
   return &file->subgrids[file->num_subgrids - 1];
@@ -5249,7 +4913,7 @@ void bg3_aigrid_file_dump(bg3_aigrid_file* file) {
   for (uint32_t i = 0; i < file->num_layers; ++i) {
     bg3_aigrid_layer* layer = file->layers + i;
     char tmpbuf[48];
-    uuid_to_string(&layer->level_template, tmpbuf);
+    bg3_uuid_to_string(&layer->level_template, tmpbuf);
     printf("layer %s num_entries %d\n", tmpbuf, layer->num_entries);
     for (uint32_t j = 0; j < layer->num_entries; ++j) {
       bg3_aigrid_layer_entry* entry = layer->entries + j;
