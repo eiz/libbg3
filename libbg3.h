@@ -29,10 +29,10 @@ extern "C" {
 
 // utilities
 
-typedef _Float16 half;
-typedef float vec3[3];
-typedef float vec4[4];
-typedef vec4 mat4x4[4];
+typedef _Float16 bg3_half;
+typedef float bg3_vec3[3];
+typedef float bg3_vec4[4];
+typedef bg3_vec4 bg3_mat4x4[4];
 
 typedef enum bg3_status {
   bg3_success = 0,
@@ -57,7 +57,7 @@ void __attribute__((noreturn, format(printf, 1, 2))) bg3_panic(char const* fmt, 
 #endif
 #define CDIV(a, b) (((a) + (b)-1) / (b))
 
-static inline uint32_t next_power_of_2(uint32_t v) {
+static inline uint32_t bg3__next_power_of_2(uint32_t v) {
   v--;
   v |= v >> 1;
   v |= v >> 2;
@@ -68,12 +68,12 @@ static inline uint32_t next_power_of_2(uint32_t v) {
   return v;
 }
 
-static inline float clampf(float x, float lo, float hi) {
+static inline float bg3__clampf(float x, float lo, float hi) {
   return MAX(lo, MIN(x, hi));
 }
 
-static inline float smoothstepf(float edge0, float edge1, float x) {
-  x = clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
+  x = bg3__clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
   return x * x * (3.0f - 2.0f * x);
 }
 
@@ -82,60 +82,63 @@ static inline float smoothstepf(float edge0, float edge1, float x) {
 typedef struct uuid {
   uint32_t word;
   uint16_t half[6];
-} uuid;
+} bg3_uuid;
 
 typedef struct mapped_file {
   int fd;
   char* data;
   size_t data_len;
-} mapped_file;
+} bg3_mapped_file;
 
-bg3_status mapped_file_init_ro(mapped_file* file, char const* path);
-bg3_status mapped_file_init_rw_trunc(mapped_file* file,
-                                     char const* path,
-                                     size_t new_size);
-void mapped_file_destroy(mapped_file* file);
-bg3_status mapped_file_read(mapped_file* file, void* dest, size_t offset, size_t len);
-int mkdirp(char* path);
+bg3_status bg3_mapped_file_init_ro(bg3_mapped_file* file, char const* path);
+bg3_status bg3_mapped_file_init_rw_trunc(bg3_mapped_file* file,
+                                         char const* path,
+                                         size_t new_size);
+void bg3_mapped_file_destroy(bg3_mapped_file* file);
+bg3_status bg3_mapped_file_read(bg3_mapped_file* file,
+                                void* dest,
+                                size_t offset,
+                                size_t len);
+int bg3_mkdirp(char* path);
 
 // the absolute most poverty level parallel do stuff operator
-struct parallel_for_thread;
-typedef int parallel_for_cb(struct parallel_for_thread* tcb);
-typedef struct parallel_for_sync {
+struct bg3_parallel_for_thread;
+typedef int bg3_parallel_for_cb(struct bg3_parallel_for_thread* tcb);
+typedef struct bg3_parallel_for_sync {
   pthread_cond_t cond;
   pthread_mutex_t mutex;
   int gate_enter;
   int gate_exit;
-} parallel_for_sync;
-typedef struct parallel_for_thread {
+} bg3_parallel_for_sync;
+typedef struct bg3_parallel_for_thread {
   int thread_num;
   int thread_count;
   int status;
   pthread_t thread;
-  parallel_for_cb* callback;
+  bg3_parallel_for_cb* callback;
   void* user_data;
-  parallel_for_sync* sync;
-} parallel_for_thread;
-int parallel_for_ncpu();
-int parallel_for(parallel_for_cb* callback, void* user_data);
-int parallel_for_n(parallel_for_cb* callback, void* user_data, int nthreads);
+  bg3_parallel_for_sync* sync;
+} bg3_parallel_for_thread;
+int bg3_parallel_for_ncpu();
+int bg3_parallel_for(bg3_parallel_for_cb* callback, void* user_data);
+int bg3_parallel_for_n(bg3_parallel_for_cb* callback, void* user_data, int nthreads);
 // gpu style thread sync, must be executed unconditionally in all parallel for
 // threads
-void sync_threads(parallel_for_thread* tcb);
+void bg3_sync_threads(bg3_parallel_for_thread* tcb);
 
 #define HASH_EMPTY_VALUE     ((void*)-1)
 #define HASH_TOMBSTONE_VALUE ((void*)-2)
 
-typedef struct hash_ops {
+typedef struct bg3_hash_ops {
   uint64_t (*hash_fn)(void* key, void* user_data);
   bool (*equal_fn)(void* lhs, void* rhs, void* user_data);
   void* (*copy_key_fn)(void* key, void* user_data);
   void (*free_key_fn)(void* key, void* user_data);
   void* (*copy_value_fn)(void* value, void* user_data);
   void (*free_value_fn)(void* value, void* user_data);
-} hash_ops;
+} bg3_hash_ops;
 
-extern const hash_ops default_hash_ops;
+extern const bg3_hash_ops default_hash_ops;
 
 // TODO: this is just kinda here atm because it doesn't have a better place to
 // be it was originally just for osiris symbol tables but the 24/8 layout and
@@ -146,50 +149,50 @@ extern const hash_ops default_hash_ops;
   ((void*)((((size_t)symtype) << 24) | (size_t)(index)))
 #define SYMBOL_TYPE_OF(sym_value)  (((size_t)sym_value) >> 24)
 #define SYMBOL_INDEX_OF(sym_value) (((size_t)sym_value) & 0xFFFFFF)
-extern const hash_ops symtab_hash_ops;
-extern const hash_ops symtab_case_hash_ops;
+extern const bg3_hash_ops symtab_hash_ops;
+extern const bg3_hash_ops symtab_case_hash_ops;
 
-typedef struct hash_entry {
+typedef struct bg3_hash_entry {
   void* key;
   void* value;
-} hash_entry;
+} bg3_hash_entry;
 
-typedef struct hash {
-  hash_ops const* ops;
+typedef struct bg3_hash {
+  bg3_hash_ops const* ops;
   void* user_data;
   size_t num_keys;
   size_t table_size;
-  hash_entry* entries;
-} hash;
+  bg3_hash_entry* entries;
+} bg3_hash;
 
-void hash_init(hash* table, hash_ops const* ops, void* user_data);
-void hash_destroy(hash* table);
-void hash_set(hash* table, void* key, void* value);
+void bg3_hash_init(bg3_hash* table, bg3_hash_ops const* ops, void* user_data);
+void bg3_hash_destroy(bg3_hash* table);
+void bg3_hash_set(bg3_hash* table, void* key, void* value);
 // sets a key if it does not exist, otherwise returns existing entry. *existing
 // is always set to the hash entry for the key, true is returned if the key was
 // inserted.
-bool hash_try_set(hash* table, void* key, void* value, hash_entry** existing);
-hash_entry* hash_get_entry(hash* table, void* key);
-bool hash_delete(hash* table, void* key);
-void hash_clear(hash* table);
+bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** existing);
+bg3_hash_entry* bg3_hash_get_entry(bg3_hash* table, void* key);
+bool bg3_hash_delete(bg3_hash* table, void* key);
+void bg3_hash_clear(bg3_hash* table);
 
-uint64_t hash_default_hash_fn(void* key, void* user_data);
-bool hash_default_equal_fn(void* lhs, void* rhs, void* user_data);
-void* hash_default_copy_fn(void* value, void* user_data);
-void hash_default_free_fn(void* value, void* user_data);
+uint64_t bg3_hash_default_hash_fn(void* key, void* user_data);
+bool bg3_hash_default_equal_fn(void* lhs, void* rhs, void* user_data);
+void* bg3_hash_default_copy_fn(void* value, void* user_data);
+void bg3_hash_default_free_fn(void* value, void* user_data);
 
-typedef struct cursor {
+typedef struct bg3_cursor {
   char* start;
   char* ptr;
   char* end;
-} cursor;
+} bg3_cursor;
 
-static inline void cursor_init(cursor* cursor, void* ptr, size_t length) {
+static inline void bg3_cursor_init(bg3_cursor* cursor, void* ptr, size_t length) {
   cursor->ptr = cursor->start = (char*)ptr;
   cursor->end = cursor->ptr + length;
 }
 
-static inline void cursor_read(cursor* cursor, void* dest, size_t length) {
+static inline void bg3_cursor_read(bg3_cursor* cursor, void* dest, size_t length) {
   ptrdiff_t avail = cursor->end - cursor->ptr;
   if (avail < length) {
     printf("buffer copy out of bounds\n");
@@ -201,34 +204,34 @@ static inline void cursor_read(cursor* cursor, void* dest, size_t length) {
   cursor->ptr += length;
 }
 
-static inline void cursor_align(cursor* cursor, size_t alignment) {
+static inline void bg3_cursor_align(bg3_cursor* cursor, size_t alignment) {
   ptrdiff_t used = cursor->ptr - cursor->start;
   size_t rem = used % alignment;
   if (rem > 0) {
-    cursor_read(cursor, 0, alignment - rem);
+    bg3_cursor_read(cursor, 0, alignment - rem);
   }
 }
 
-static inline void cursor_seek(cursor* cursor, size_t offset) {
+static inline void bg3_cursor_seek(bg3_cursor* cursor, size_t offset) {
   cursor->ptr = cursor->start;
-  cursor_read(cursor, 0, offset);
+  bg3_cursor_read(cursor, 0, offset);
 }
 
-typedef struct buffer {
+typedef struct bg3_buffer {
   char* data;
   size_t size;
   size_t capacity;
-} buffer;
+} bg3_buffer;
 
-static inline void buffer_init(buffer* buffer) {
-  memset(buffer, 0, sizeof(struct buffer));
+static inline void bg3_buffer_init(bg3_buffer* buffer) {
+  memset(buffer, 0, sizeof(bg3_buffer));
 }
 
-static inline void buffer_destroy(buffer* buffer) {
+static inline void bg3_buffer_destroy(bg3_buffer* buffer) {
   free(buffer->data);
 }
 
-static inline void buffer_push(buffer* buffer, void const* new_data, size_t len) {
+static inline void bg3_buffer_push(bg3_buffer* buffer, void const* new_data, size_t len) {
   // TODO: overflow =( we need checked math lol
   size_t new_size = buffer->size + len;
   size_t new_capacity = buffer->capacity;
@@ -243,12 +246,14 @@ static inline void buffer_push(buffer* buffer, void const* new_data, size_t len)
   buffer->size += len;
 }
 
-static inline void buffer_pop(buffer* buffer, size_t len) {
+static inline void bg3_buffer_pop(bg3_buffer* buffer, size_t len) {
   assert(buffer->size >= len);
   buffer->size -= len;
 }
 
-static inline void buffer_vprintf(buffer* buffer, char const* format, va_list ap) {
+static inline void bg3_buffer_vprintf(bg3_buffer* buffer,
+                                      char const* format,
+                                      va_list ap) {
   va_list ap_tmp;
   va_copy(ap_tmp, ap);
   size_t avail = buffer->capacity - buffer->size;
@@ -268,82 +273,82 @@ static inline void buffer_vprintf(buffer* buffer, char const* format, va_list ap
 }
 
 static inline void __attribute__((format(printf, 2, 3)))
-buffer_printf(buffer* buffer, char const* format, ...) {
+bg3_buffer_printf(bg3_buffer* buffer, char const* format, ...) {
   va_list ap;
   va_start(ap, format);
-  buffer_vprintf(buffer, format, ap);
+  bg3_buffer_vprintf(buffer, format, ap);
   va_end(ap);
 }
 
-static inline void buffer_putchar(buffer* buffer, char chr) {
-  buffer_push(buffer, &chr, 1);
+static inline void bg3_buffer_putchar(bg3_buffer* buffer, char chr) {
+  bg3_buffer_push(buffer, &chr, 1);
 }
 
-static inline void buffer_copy(buffer* dest, buffer* src) {
+static inline void bg3_buffer_copy(bg3_buffer* dest, bg3_buffer* src) {
   dest->size = 0;
-  buffer_push(dest, src->data, src->size);
-  buffer_putchar(dest, 0);
+  bg3_buffer_push(dest, src->data, src->size);
+  bg3_buffer_putchar(dest, 0);
   dest->size--;
 }
 
-void buffer_hexdump(buffer* buf, size_t base, void* ptr, size_t length);
-void hex_dump(void* ptr, size_t length);
-bool strcasesuffix(char const* str, char const* suffix);
+void bg3_buffer_hexdump(bg3_buffer* buf, size_t base, void* ptr, size_t length);
+void bg3_hex_dump(void* ptr, size_t length);
+bool bg3_strcasesuffix(char const* str, char const* suffix);
 
-typedef struct arena_chunk {
-  struct arena_chunk* next;
+typedef struct bg3_arena_chunk {
+  struct bg3_arena_chunk* next;
   char* bump;
   char* end;
-} arena_chunk;
+} bg3_arena_chunk;
 
-typedef struct arena {
+typedef struct bg3_arena {
   size_t chunk_size;
   size_t max_waste;
-  arena_chunk* chunks;
-  arena_chunk* full_chunks;
-} arena;
+  bg3_arena_chunk* chunks;
+  bg3_arena_chunk* full_chunks;
+} bg3_arena;
 
-void arena_init(arena* a, size_t chunk_size, size_t max_waste);
-void arena_destroy(arena* a);
-void* arena_alloc(arena* a, size_t size);
-static inline void* arena_calloc(arena* a, size_t count, size_t size) {
+void bg3_arena_init(bg3_arena* a, size_t chunk_size, size_t max_waste);
+void bg3_arena_destroy(bg3_arena* a);
+void* bg3_arena_alloc(bg3_arena* a, size_t size);
+static inline void* bg3_arena_calloc(bg3_arena* a, size_t count, size_t size) {
   size_t total_size = count * size;
-  void* result = arena_alloc(a, total_size);
+  void* result = bg3_arena_alloc(a, total_size);
   memset(result, 0, total_size);
   return result;
 }
-char* arena_strdup(arena* a, char const* str);
-char* arena_sprintf(arena* a, char const* format, ...);
+char* bg3_arena_strdup(bg3_arena* a, char const* str);
+char* bg3_arena_sprintf(bg3_arena* a, char const* format, ...);
 
 #ifdef __cplusplus
-#define array_push(alloc, owner, member, val)                              \
-  do {                                                                     \
-    if ((owner)->cap_##member == (owner)->num_##member) {                  \
-      size_t old_cap = (owner)->cap_##member;                              \
-      size_t new_cap = old_cap + old_cap / 2 + 1;                          \
-      void* dest = arena_alloc(alloc, new_cap * sizeof(*(owner)->member)); \
-      if (old_cap) {                                                       \
-        memcpy(dest, (owner)->member, old_cap * sizeof(*(owner)->member)); \
-      }                                                                    \
-      (owner)->cap_##member = new_cap;                                     \
-      (owner)->member = (decltype((owner)->member))dest;                   \
-    }                                                                      \
-    (owner)->member[(owner)->num_##member++] = val;                        \
+#define array_push(alloc, owner, member, val)                                  \
+  do {                                                                         \
+    if ((owner)->cap_##member == (owner)->num_##member) {                      \
+      size_t old_cap = (owner)->cap_##member;                                  \
+      size_t new_cap = old_cap + old_cap / 2 + 1;                              \
+      void* dest = bg3_arena_alloc(alloc, new_cap * sizeof(*(owner)->member)); \
+      if (old_cap) {                                                           \
+        memcpy(dest, (owner)->member, old_cap * sizeof(*(owner)->member));     \
+      }                                                                        \
+      (owner)->cap_##member = new_cap;                                         \
+      (owner)->member = (decltype((owner)->member))dest;                       \
+    }                                                                          \
+    (owner)->member[(owner)->num_##member++] = val;                            \
   } while (0)
 #else
-#define array_push(alloc, owner, member, val)                              \
-  do {                                                                     \
-    if ((owner)->cap_##member == (owner)->num_##member) {                  \
-      size_t old_cap = (owner)->cap_##member;                              \
-      size_t new_cap = old_cap + old_cap / 2 + 1;                          \
-      void* dest = arena_alloc(alloc, new_cap * sizeof(*(owner)->member)); \
-      if (old_cap) {                                                       \
-        memcpy(dest, (owner)->member, old_cap * sizeof(*(owner)->member)); \
-      }                                                                    \
-      (owner)->cap_##member = new_cap;                                     \
-      (owner)->member = dest;                                              \
-    }                                                                      \
-    (owner)->member[(owner)->num_##member++] = val;                        \
+#define array_push(alloc, owner, member, val)                                  \
+  do {                                                                         \
+    if ((owner)->cap_##member == (owner)->num_##member) {                      \
+      size_t old_cap = (owner)->cap_##member;                                  \
+      size_t new_cap = old_cap + old_cap / 2 + 1;                              \
+      void* dest = bg3_arena_alloc(alloc, new_cap * sizeof(*(owner)->member)); \
+      if (old_cap) {                                                           \
+        memcpy(dest, (owner)->member, old_cap * sizeof(*(owner)->member));     \
+      }                                                                        \
+      (owner)->cap_##member = new_cap;                                         \
+      (owner)->member = dest;                                                  \
+    }                                                                          \
+    (owner)->member[(owner)->num_##member++] = val;                            \
   } while (0)
 #endif
 
@@ -364,7 +369,7 @@ char* arena_sprintf(arena* a, char const* format, ...);
 #define LSPK_ENTRY_COMPRESSION_DEFAULT 2
 #define LSPK_ENTRY_COMPRESSION_MAX     4
 
-typedef struct lspk_header {
+typedef struct bg3_lspk_header {
   uint32_t magic;
   uint32_t version;
   uint64_t manifest_offset;
@@ -373,14 +378,14 @@ typedef struct lspk_header {
   uint8_t priority;
   uint8_t md5[16];
   uint16_t num_parts;
-} lspk_header;
+} bg3_lspk_header;
 
-typedef struct lspk_manifest_header {
+typedef struct bg3_lspk_manifest_header {
   uint32_t num_files;
   uint32_t compressed_size;
-} lspk_manifest_header;
+} bg3_lspk_manifest_header;
 
-typedef struct lspk_manifest_entry {
+typedef struct bg3_lspk_manifest_entry {
   char name[256];
   uint32_t offset_lo;
   uint16_t offset_hi;
@@ -388,21 +393,21 @@ typedef struct lspk_manifest_entry {
   uint8_t compression;
   uint32_t compressed_size;
   uint32_t uncompressed_size;
-} lspk_manifest_entry;
+} bg3_lspk_manifest_entry;
 
-typedef struct lspk_file {
-  mapped_file* mapped;
-  lspk_header header;
+typedef struct bg3_lspk_file {
+  bg3_mapped_file* mapped;
+  bg3_lspk_header header;
   size_t num_files;
-  lspk_manifest_entry* manifest;
-} lspk_file;
+  bg3_lspk_manifest_entry* manifest;
+} bg3_lspk_file;
 
-int lspk_file_init(lspk_file* file, mapped_file* mapped);
-void lspk_file_destroy(lspk_file* file);
-bg3_status lspk_file_extract(lspk_file* file,
-                             lspk_manifest_entry* entry,
-                             char* dest,
-                             size_t* dest_len);
+int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped);
+void bg3_lspk_file_destroy(bg3_lspk_file* file);
+bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
+                                 bg3_lspk_manifest_entry* entry,
+                                 char* dest,
+                                 size_t* dest_len);
 
 // object files
 #define LSOF_MAGIC       0x464F534C
@@ -410,129 +415,129 @@ bg3_status lspk_file_extract(lspk_file* file,
 #define LSOF_VERSION_MAX 7
 
 typedef enum {
-  lsof_dt_none = 0x00,
-  lsof_dt_uint8 = 0x01,
-  lsof_dt_int16 = 0x02,
-  lsof_dt_uint16 = 0x03,
-  lsof_dt_int32 = 0x04,
-  lsof_dt_uint32 = 0x05,
-  lsof_dt_float = 0x06,
-  lsof_dt_double = 0x07,
-  lsof_dt_ivec2 = 0x08,
-  lsof_dt_ivec3 = 0x09,
-  lsof_dt_ivec4 = 0x0A,
-  lsof_dt_vec2 = 0x0B,
-  lsof_dt_vec3 = 0x0C,
-  lsof_dt_vec4 = 0x0D,
-  lsof_dt_mat2 = 0x0E,
-  lsof_dt_mat3 = 0x0F,
-  lsof_dt_mat3x4 = 0x10,
-  lsof_dt_mat4x3 = 0x11,
-  lsof_dt_mat4 = 0x12,
-  lsof_dt_bool = 0x13,
-  lsof_dt_string = 0x14,
-  lsof_dt_path = 0x15,
-  lsof_dt_fixedstring = 0x16,
-  lsof_dt_lsstring = 0x17,
-  lsof_dt_uint64 = 0x18,
-  lsof_dt_scratchbuffer = 0x19,
-  lsof_dt_long = 0x1A,
-  lsof_dt_int8 = 0x1B,
-  lsof_dt_translatedstring = 0x1C,
-  lsof_dt_wstring = 0x1D,
-  lsof_dt_lswstring = 0x1E,
-  lsof_dt_uuid = 0x1F,
-  lsof_dt_int64 = 0x20,
-  lsof_dt_translatedfsstring = 0x21,
+  bg3_lsof_dt_none = 0x00,
+  bg3_lsof_dt_uint8 = 0x01,
+  bg3_lsof_dt_int16 = 0x02,
+  bg3_lsof_dt_uint16 = 0x03,
+  bg3_lsof_dt_int32 = 0x04,
+  bg3_lsof_dt_uint32 = 0x05,
+  bg3_lsof_dt_float = 0x06,
+  bg3_lsof_dt_double = 0x07,
+  bg3_lsof_dt_ivec2 = 0x08,
+  bg3_lsof_dt_ivec3 = 0x09,
+  bg3_lsof_dt_ivec4 = 0x0A,
+  bg3_lsof_dt_vec2 = 0x0B,
+  bg3_lsof_dt_vec3 = 0x0C,
+  bg3_lsof_dt_vec4 = 0x0D,
+  bg3_lsof_dt_mat2 = 0x0E,
+  bg3_lsof_dt_mat3 = 0x0F,
+  bg3_lsof_dt_mat3x4 = 0x10,
+  bg3_lsof_dt_mat4x3 = 0x11,
+  bg3_lsof_dt_mat4 = 0x12,
+  bg3_lsof_dt_bool = 0x13,
+  bg3_lsof_dt_string = 0x14,
+  bg3_lsof_dt_path = 0x15,
+  bg3_lsof_dt_fixedstring = 0x16,
+  bg3_lsof_dt_lsstring = 0x17,
+  bg3_lsof_dt_uint64 = 0x18,
+  bg3_lsof_dt_scratchbuffer = 0x19,
+  bg3_lsof_dt_long = 0x1A,
+  bg3_lsof_dt_int8 = 0x1B,
+  bg3_lsof_dt_translatedstring = 0x1C,
+  bg3_lsof_dt_wstring = 0x1D,
+  bg3_lsof_dt_lswstring = 0x1E,
+  bg3_lsof_dt_uuid = 0x1F,
+  bg3_lsof_dt_int64 = 0x20,
+  bg3_lsof_dt_translatedfsstring = 0x21,
 
-  lsof_dt_last = lsof_dt_translatedfsstring,
-} lsof_dt;
+  bg3_lsof_dt_last = bg3_lsof_dt_translatedfsstring,
+} bg3_lsof_dt;
 
-typedef struct lsof_size {
+typedef struct bg3_lsof_size {
   uint32_t uncompressed_size;
   uint32_t compressed_size;
-} lsof_size;
+} bg3_lsof_size;
 
-typedef struct lsof_header {
+typedef struct bg3_lsof_header {
   uint32_t magic;
   uint32_t version;
   uint64_t engine_version;  // according to lslib
-  lsof_size string_table;
-  lsof_size unknown_table;
-  lsof_size node_table;
-  lsof_size attr_table;
-  lsof_size value_table;
+  bg3_lsof_size string_table;
+  bg3_lsof_size unknown_table;
+  bg3_lsof_size node_table;
+  bg3_lsof_size attr_table;
+  bg3_lsof_size value_table;
   uint8_t compression;
   uint32_t flags;
-} lsof_header;
+} bg3_lsof_header;
 
 // Not always set even in current BG3!
 #define LSOF_FLAG_HAS_SIBLING_POINTERS 0x1
 // This is set on some _merged.lsf files in Levels/ and I'm not sure what it is
 #define LSOF_FLAG_UNKNOWN_1            0x2
 
-typedef struct lsof_sym_ref {
+typedef struct bg3_lsof_sym_ref {
   uint16_t entry;
   uint16_t bucket;
-} lsof_sym_ref;
-typedef int32_t lsof_node_ref;
-typedef int32_t lsof_attr_ref;
-typedef int32_t lsof_value_ref;
+} bg3_lsof_sym_ref;
+typedef int32_t bg3_lsof_node_ref;
+typedef int32_t bg3_lsof_attr_ref;
+typedef int32_t bg3_lsof_value_ref;
 
-typedef struct lsof_node_wide {
-  lsof_sym_ref name;
-  lsof_node_ref parent;
-  lsof_node_ref next;
-  lsof_attr_ref attrs;
-} lsof_node_wide;
+typedef struct bg3_lsof_node_wide {
+  bg3_lsof_sym_ref name;
+  bg3_lsof_node_ref parent;
+  bg3_lsof_node_ref next;
+  bg3_lsof_attr_ref attrs;
+} bg3_lsof_node_wide;
 
-typedef struct lsof_node_slim {
-  lsof_sym_ref name;
-  lsof_node_ref attrs;
-  lsof_node_ref parent;
-} lsof_node_slim;
+typedef struct bg3_lsof_node_slim {
+  bg3_lsof_sym_ref name;
+  bg3_lsof_node_ref attrs;
+  bg3_lsof_node_ref parent;
+} bg3_lsof_node_slim;
 
-typedef struct lsof_attr_wide {
-  lsof_sym_ref name;
+typedef struct bg3_lsof_attr_wide {
+  bg3_lsof_sym_ref name;
   uint32_t type : 6;
   uint32_t length : 26;
-  lsof_attr_ref next;
+  bg3_lsof_attr_ref next;
   union {
-    lsof_value_ref value;
-    lsof_node_ref owner;
+    bg3_lsof_value_ref value;
+    bg3_lsof_node_ref owner;
   };
-} lsof_attr_wide;
+} bg3_lsof_attr_wide;
 
-typedef struct lsof_attr_slim {
-  lsof_sym_ref name;
+typedef struct bg3_lsof_attr_slim {
+  bg3_lsof_sym_ref name;
   uint32_t type : 6;
   uint32_t length : 26;
-  lsof_node_ref owner;
-} lsof_attr_slim;
+  bg3_lsof_node_ref owner;
+} bg3_lsof_attr_slim;
 
-typedef struct lsof_symtab_entry {
+typedef struct bg3_lsof_symtab_entry {
   size_t length;
   char* data;
   char* c_str;
-} lsof_symtab_entry;
+} bg3_lsof_symtab_entry;
 
-typedef struct lsof_symtab_bucket {
+typedef struct bg3_lsof_symtab_bucket {
   size_t num_entries;
   size_t capacity;
-  lsof_symtab_entry* entries;
-} lsof_symtab_bucket;
+  bg3_lsof_symtab_entry* entries;
+} bg3_lsof_symtab_bucket;
 
-typedef struct lsof_symtab {
+typedef struct bg3_lsof_symtab {
   size_t num_buckets;
   bool is_writable;
-  lsof_symtab_bucket* buckets;
-} lsof_symtab;
+  bg3_lsof_symtab_bucket* buckets;
+} bg3_lsof_symtab;
 
-typedef struct lsof_reader {
+typedef struct bg3_lsof_reader {
   char* data;
   size_t data_len;
-  lsof_header header;
-  lsof_symtab symtab;
+  bg3_lsof_header header;
+  bg3_lsof_symtab symtab;
   size_t num_nodes;
   size_t num_attrs;
   char* string_table_raw;
@@ -541,97 +546,104 @@ typedef struct lsof_reader {
   char* value_table_raw;
   uint32_t* value_offsets;
   bool owns_sections;
-} lsof_reader;
+} bg3_lsof_reader;
 
-typedef struct lsof_writer_stack_frame {
-  lsof_node_ref node_id;
-  lsof_node_ref last_child;
-  lsof_attr_ref last_attr;
-} lsof_writer_stack_frame;
+typedef struct bg3_lsof_writer_stack_frame {
+  bg3_lsof_node_ref node_id;
+  bg3_lsof_node_ref last_child;
+  bg3_lsof_attr_ref last_attr;
+} bg3_lsof_writer_stack_frame;
 
-typedef struct lsof_writer {
-  lsof_symtab symtab;
+typedef struct bg3_lsof_writer {
+  bg3_lsof_symtab symtab;
   size_t num_nodes;
   size_t num_attrs;
   size_t num_stack;
-  buffer stack;
-  buffer node_table;
-  buffer attr_table;
-  buffer value_table;
-} lsof_writer;
+  bg3_buffer stack;
+  bg3_buffer node_table;
+  bg3_buffer attr_table;
+  bg3_buffer value_table;
+} bg3_lsof_writer;
 
-void lsof_symtab_init(lsof_symtab* table, int num_buckets);
-void lsof_symtab_init_data(lsof_symtab* table, char* ptr, size_t length);
-void lsof_symtab_destroy(lsof_symtab* table);
-lsof_symtab_entry* lsof_symtab_get_ref(lsof_symtab* table, lsof_sym_ref ref);
-char const* lsof_symtab_entry_c_str(lsof_symtab_entry* entry);
-void lsof_symtab_dump(lsof_symtab* table);
-lsof_sym_ref lsof_symtab_intern(lsof_symtab* table, char const* name);
-void lsof_symtab_write(lsof_symtab* table, buffer* buf);
+void bg3_lsof_symtab_init(bg3_lsof_symtab* table, int num_buckets);
+void bg3_lsof_symtab_init_data(bg3_lsof_symtab* table, char* ptr, size_t length);
+void bg3_lsof_symtab_destroy(bg3_lsof_symtab* table);
+bg3_lsof_symtab_entry* bg3_lsof_symtab_get_ref(bg3_lsof_symtab* table,
+                                               bg3_lsof_sym_ref ref);
+char const* bg3_lsof_symtab_entry_c_str(bg3_lsof_symtab_entry* entry);
+void bg3_lsof_symtab_dump(bg3_lsof_symtab* table);
+bg3_lsof_sym_ref bg3_lsof_symtab_intern(bg3_lsof_symtab* table, char const* name);
+void bg3_lsof_symtab_write(bg3_lsof_symtab* table, bg3_buffer* buf);
 
-int lsof_reader_init(lsof_reader* file, char* data, size_t data_len);
-void lsof_reader_destroy(lsof_reader* file);
-int lsof_reader_get_node(lsof_reader* file, lsof_node_wide* node, size_t node_index);
-int lsof_reader_get_attr(lsof_reader* file, lsof_attr_wide* attr, size_t attr_index);
-void lsof_reader_ensure_value_offsets(lsof_reader* file);
-int lsof_reader_print_sexp(lsof_reader* file, buffer* out);
+int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len);
+void bg3_lsof_reader_destroy(bg3_lsof_reader* file);
+int bg3_lsof_reader_get_node(bg3_lsof_reader* file,
+                             bg3_lsof_node_wide* node,
+                             size_t node_index);
+int bg3_lsof_reader_get_attr(bg3_lsof_reader* file,
+                             bg3_lsof_attr_wide* attr,
+                             size_t attr_index);
+void bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file);
+int bg3_lsof_reader_print_sexp(bg3_lsof_reader* file, bg3_buffer* out);
 
-void lsof_writer_init(lsof_writer* writer);
-void lsof_writer_destroy(lsof_writer* writer);
-bg3_status lsof_writer_write_file(lsof_writer* writer, char const* path);
-void lsof_writer_push_node(lsof_writer* writer, char const* node_name);
-void lsof_writer_push_attr(lsof_writer* writer,
-                           char const* attr_name,
-                           lsof_dt type,
-                           void* ptr,
-                           size_t len);
-void lsof_writer_pop_node(lsof_writer* writer);
-bg3_status lsof_writer_push_sexps(lsof_writer* writer, char const* data, size_t data_len);
+void bg3_lsof_writer_init(bg3_lsof_writer* writer);
+void bg3_lsof_writer_destroy(bg3_lsof_writer* writer);
+bg3_status bg3_lsof_writer_write_file(bg3_lsof_writer* writer, char const* path);
+void bg3_lsof_writer_push_node(bg3_lsof_writer* writer, char const* node_name);
+void bg3_lsof_writer_push_attr(bg3_lsof_writer* writer,
+                               char const* attr_name,
+                               bg3_lsof_dt type,
+                               void* ptr,
+                               size_t len);
+void bg3_lsof_writer_pop_node(bg3_lsof_writer* writer);
+bg3_status bg3_lsof_writer_push_sexps(bg3_lsof_writer* writer,
+                                      char const* data,
+                                      size_t data_len);
 
 // localization files
 #define LOCA_MAGIC 0x41434F4C  // 'LOCA' in little endian
 
-typedef struct loca_reader_entry_raw {
+typedef struct bg3_loca_reader_entry_raw {
   char handle[64];
   uint16_t version;
   uint16_t size_lo;
   uint16_t size_hi;
-} loca_reader_entry_raw;
+} bg3_loca_reader_entry_raw;
 
-typedef struct loca_reader_entry {
+typedef struct bg3_loca_reader_entry {
   char handle[64];
   uint16_t version;
   char* data;
   size_t data_size;
-} loca_reader_entry;
+} bg3_loca_reader_entry;
 
-typedef struct loca_header {
+typedef struct bg3_loca_header {
   uint32_t magic;
   uint32_t num_entries;
   uint32_t heap_offset;
-} loca_header;
+} bg3_loca_header;
 
-typedef struct loca_reader {
-  loca_header header;
-  loca_reader_entry* entries;
-} loca_reader;
+typedef struct bg3_loca_reader {
+  bg3_loca_header header;
+  bg3_loca_reader_entry* entries;
+} bg3_loca_reader;
 
-bg3_status loca_reader_init(loca_reader* file, char* data, size_t data_len);
-int loca_reader_dump(loca_reader* file);
-void loca_reader_destroy(loca_reader* file);
+bg3_status bg3_loca_reader_init(bg3_loca_reader* file, char* data, size_t data_len);
+int bg3_loca_reader_dump(bg3_loca_reader* file);
+void bg3_loca_reader_destroy(bg3_loca_reader* file);
 
-typedef struct loca_writer {
-  buffer entries;
-  buffer heap;
-} loca_writer;
+typedef struct bg3_loca_writer {
+  bg3_buffer entries;
+  bg3_buffer heap;
+} bg3_loca_writer;
 
-void loca_writer_init(loca_writer* writer);
-void loca_writer_destroy(loca_writer* writer);
-void loca_writer_push(loca_writer* writer,
-                      char const* handle,
-                      uint16_t version,
-                      char const* text);
-bg3_status loca_writer_write_file(loca_writer* writer, char const* path);
+void bg3_loca_writer_init(bg3_loca_writer* writer);
+void bg3_loca_writer_destroy(bg3_loca_writer* writer);
+void bg3_loca_writer_push(bg3_loca_writer* writer,
+                          char const* handle,
+                          uint16_t version,
+                          char const* text);
+bg3_status bg3_loca_writer_write_file(bg3_loca_writer* writer, char const* path);
 
 // patch files
 
@@ -639,20 +651,20 @@ bg3_status loca_writer_write_file(loca_writer* writer, char const* path);
 #define PATCH_VERSION            8
 #define PATCH_VERSION_NON_ROBUST 5
 
-typedef struct patch_header {
+typedef struct bg3_patch_header {
   uint64_t magic;
   uint32_t version;
   uint32_t metadata_size;
-} patch_header;
+} bg3_patch_header;
 
-typedef struct patch_key_bounds {
+typedef struct bg3_patch_key_bounds {
   int32_t x0;
   int32_t x1;
   int32_t y0;
   int32_t y1;
-} patch_key_bounds;
+} bg3_patch_key_bounds;
 
-typedef struct patch_metadata {
+typedef struct bg3_patch_metadata {
   uint32_t local_cols;
   uint32_t local_rows;
   uint32_t tex_cols;
@@ -663,58 +675,58 @@ typedef struct patch_metadata {
   uint32_t chunk_y;
   uint32_t num_holes;
   uint32_t num_layers;
-  patch_key_bounds key_bounds[2];
-} patch_metadata;
+  bg3_patch_key_bounds key_bounds[2];
+} bg3_patch_metadata;
 
-typedef struct patch_layer {
+typedef struct bg3_patch_layer {
   char* name;
   uint8_t* weights;
-} patch_layer;
+} bg3_patch_layer;
 
 // the structure of these is known, but the function currently isn't.
 // in the engine these are referred to as "KeyMaps"
-typedef struct patch_key_entry {
+typedef struct bg3_patch_key_entry {
   char* data;
   size_t data_len;
-} patch_key_entry;
+} bg3_patch_key_entry;
 
-typedef struct patch_keys {
-  patch_key_bounds* bounds;
-  patch_key_entry entries[4];
-} patch_keys;
+typedef struct bg3_patch_keys {
+  bg3_patch_key_bounds* bounds;
+  bg3_patch_key_entry entries[4];
+} bg3_patch_keys;
 
-typedef struct bc7_block {
+typedef struct bg3_bc7_block {
   uint64_t lo;
   uint64_t hi;
-} bc7_block;
+} bg3_bc7_block;
 
-typedef struct patch_file {
-  patch_header header;
-  patch_metadata metadata;
+typedef struct bg3_patch_file {
+  bg3_patch_header header;
+  bg3_patch_metadata metadata;
   char* data;
   size_t data_len;
   float* heightfield;
   uint32_t* holes;
-  bc7_block* normal_map;
+  bg3_bc7_block* normal_map;
   size_t normal_map_rows;
   size_t normal_map_cols;
-  patch_layer* layers;
+  bg3_patch_layer* layers;
   size_t num_keys;
-  patch_keys keys[2];
-} patch_file;
+  bg3_patch_keys keys[2];
+} bg3_patch_file;
 
-bg3_status patch_file_init(patch_file* file, char* data, size_t data_len);
-void patch_file_destroy(patch_file* file);
-bg3_status patch_file_dump(patch_file* file);
+bg3_status bg3_patch_file_init(bg3_patch_file* file, char* data, size_t data_len);
+void bg3_patch_file_destroy(bg3_patch_file* file);
+bg3_status bg3_patch_file_dump(bg3_patch_file* file);
 
 // granny models
-typedef enum granny_compression_type {
-  granny_compression_none,
-  granny_compression_oodle0,
-  granny_compression_oodle1,
-  granny_compression_bitknit1,
-  granny_compression_bitknit2,
-} granny_compression_type;
+typedef enum bg3_granny_compression_type {
+  bg3_granny_compression_none,
+  bg3_granny_compression_oodle0,
+  bg3_granny_compression_oodle1,
+  bg3_granny_compression_bitknit1,
+  bg3_granny_compression_bitknit2,
+} bg3_granny_compression_type;
 
 // there are other granny magics, but this one is the one we care about:
 // 64-bit little endian.
@@ -730,206 +742,205 @@ typedef enum granny_compression_type {
 
 // Begin Granny3D on-disk structures
 
-typedef enum granny_data_type {
-  granny_dt_end = 0,
-  granny_dt_inline = 1,
-  granny_dt_reference = 2,
-  granny_dt_reference_to_array = 3,
-  granny_dt_array_of_references = 4,
-  granny_dt_variant_reference = 5,
-  granny_dt_reference_to_variant_array = 7,
-  granny_dt_string = 8,
-  granny_dt_transform = 9,
-  granny_dt_float = 10,
-  granny_dt_int8 = 11,
-  granny_dt_uint8 = 12,
-  granny_dt_binormal_int8 = 13,
-  granny_dt_normal_uint8 = 14,
-  granny_dt_int16 = 15,
-  granny_dt_uint16 = 16,
-  granny_dt_binormal_int16 = 17,
-  granny_dt_normal_uint16 = 18,
-  granny_dt_int32 = 19,
-  granny_dt_uint32 = 20,
-  granny_dt_half = 21,
-  granny_dt_empty_reference = 22,
-  granny_dt_count = granny_dt_empty_reference + 1,
-} granny_data_type;
+typedef enum bg3_granny_data_type {
+  bg3_granny_dt_end = 0,
+  bg3_granny_dt_inline = 1,
+  bg3_granny_dt_reference = 2,
+  bg3_granny_dt_reference_to_array = 3,
+  bg3_granny_dt_array_of_references = 4,
+  bg3_granny_dt_variant_reference = 5,
+  bg3_granny_dt_reference_to_variant_array = 7,
+  bg3_granny_dt_string = 8,
+  bg3_granny_dt_transform = 9,
+  bg3_granny_dt_float = 10,
+  bg3_granny_dt_int8 = 11,
+  bg3_granny_dt_uint8 = 12,
+  bg3_granny_dt_binormal_int8 = 13,
+  bg3_granny_dt_normal_uint8 = 14,
+  bg3_granny_dt_int16 = 15,
+  bg3_granny_dt_uint16 = 16,
+  bg3_granny_dt_binormal_int16 = 17,
+  bg3_granny_dt_normal_uint16 = 18,
+  bg3_granny_dt_int32 = 19,
+  bg3_granny_dt_uint32 = 20,
+  bg3_granny_dt_half = 21,
+  bg3_granny_dt_empty_reference = 22,
+  bg3_granny_dt_count = bg3_granny_dt_empty_reference + 1,
+} bg3_granny_data_type;
 
-typedef struct GRANNY_PACK granny_section_ptr {
+typedef struct GRANNY_PACK bg3_granny_section_ptr {
   uint32_t section;
   uint32_t offset;
-} GRANNY_PACK granny_section_ptr;
+} GRANNY_PACK bg3_granny_section_ptr;
 
-typedef struct GRANNY_PACK granny_fixup {
+typedef struct GRANNY_PACK bg3_granny_fixup {
   uint32_t section_offset;
-  granny_section_ptr ptr;
-} GRANNY_PACK granny_fixup;
+  bg3_granny_section_ptr ptr;
+} GRANNY_PACK bg3_granny_fixup;
 
-typedef struct GRANNY_PACK granny_magic {
+typedef struct GRANNY_PACK bg3_granny_magic {
   uint64_t lo;
   uint64_t hi;
   uint32_t header_size;
   uint32_t header_format;
   uint32_t reserved[2];
-} granny_magic;
+} bg3_granny_magic;
 
-typedef struct GRANNY_PACK granny_header {
+typedef struct GRANNY_PACK bg3_granny_header {
   uint32_t format_version;
   uint32_t file_size;
   uint32_t crc32;
   uint32_t section_table;
   uint32_t num_sections;
-  granny_section_ptr root_type;
-  granny_section_ptr root_obj;
+  bg3_granny_section_ptr root_type;
+  bg3_granny_section_ptr root_obj;
   uint32_t type_tag;
   uint32_t extra_tags[4];
   uint32_t strings_crc;
   uint32_t reserved[3];
-} granny_header;
+} bg3_granny_header;
 
-typedef struct GRANNY_PACK granny_section_header {
+typedef struct GRANNY_PACK bg3_granny_section_header {
   uint32_t compression;
   uint32_t offset;
   uint32_t compressed_len;
   uint32_t uncompressed_len;
   uint32_t alignment;
-  // oodle entropy coder (sometimes?) uses 3 parallel bitstreams. these
-  // delimit them?
+  // some compressors use multiple streams?
   uint32_t stream0_end;
   uint32_t stream1_end;
   uint32_t fixups_offset;
   uint32_t num_fixups;
   uint32_t mixed_marshal_offset;
   uint32_t num_mixed_marshals;
-} granny_section_header;
+} bg3_granny_section_header;
 
-typedef struct GRANNY_PACK granny_type_info {
-  granny_data_type type;
+typedef struct GRANNY_PACK bg3_granny_type_info {
+  bg3_granny_data_type type;
   char* name;
-  struct granny_type_info* reference_type;
+  struct bg3_granny_type_info* reference_type;
   uint32_t num_elements;
   uint32_t tags[3];
   uint64_t reserved;
-} granny_type_info;
+} bg3_granny_type_info;
 
-typedef struct GRANNY_PACK granny_variant {
-  granny_type_info* type;
+typedef struct GRANNY_PACK bg3_granny_variant {
+  bg3_granny_type_info* type;
   void* obj;
-} granny_variant;
+} bg3_granny_variant;
 
-typedef struct GRANNY_PACK granny_variant_array {
-  granny_type_info* type;
+typedef struct GRANNY_PACK bg3_granny_variant_array {
+  bg3_granny_type_info* type;
   int32_t num_items;
   void* items;
-} granny_variant_array;
+} bg3_granny_variant_array;
 
-typedef struct GRANNY_PACK granny_transform {
+typedef struct GRANNY_PACK bg3_granny_transform {
   uint32_t flags;
-  vec3 position;
-  vec4 orientation;
-  vec3 scale_shear[3];
-} granny_transform;
+  bg3_vec3 position;
+  bg3_vec4 orientation;
+  bg3_vec3 scale_shear[3];
+} bg3_granny_transform;
 
-typedef struct GRANNY_PACK granny_texture_layout {
+typedef struct GRANNY_PACK bg3_granny_texture_layout {
   int32_t bytes_per_pixel;
   int32_t shift_for_component[4];
   int32_t bits_for_component[4];
-} granny_texture_layout;
+} bg3_granny_texture_layout;
 
-typedef struct GRANNY_PACK granny_obj_art_tool_info {
+typedef struct GRANNY_PACK bg3_granny_obj_art_tool_info {
   char* from_art_tool_name;
   int32_t art_tool_major_revision;
   int32_t art_tool_minor_revision;
   int32_t art_tool_pointer_size;
   float units_per_meter;
-  vec3 origin;
-  vec3 right_vector;
-  vec3 up_vector;
-  vec3 back_vector;
-  granny_variant extended_data;
-} granny_obj_art_tool_info;
+  bg3_vec3 origin;
+  bg3_vec3 right_vector;
+  bg3_vec3 up_vector;
+  bg3_vec3 back_vector;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_art_tool_info;
 
-typedef struct GRANNY_PACK granny_obj_exporter_info {
+typedef struct GRANNY_PACK bg3_granny_obj_exporter_info {
   char* exporter_name;
   int32_t exporter_major_revision;
   int32_t exporter_minor_revision;
   int32_t exporter_customization;
   int32_t exporter_build_number;
-  granny_variant extended_data;
-} granny_obj_exporter_info;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_exporter_info;
 
-typedef struct GRANNY_PACK granny_obj_mip_level {
+typedef struct GRANNY_PACK bg3_granny_obj_mip_level {
   int32_t stride;
   int32_t num_pixel_bytes;
   uint8_t* pixel_bytes;
-} granny_obj_mip_level;
+} bg3_granny_obj_mip_level;
 
-typedef struct GRANNY_PACK granny_obj_texture {
+typedef struct GRANNY_PACK bg3_granny_obj_texture {
   char* from_file_name;
   int32_t texture_type;
   int32_t width;
   int32_t height;
   int32_t encoding;
   int32_t sub_format;
-  granny_texture_layout layout;
+  bg3_granny_texture_layout layout;
   int32_t num_images;
-  granny_obj_mip_level** images;
-  granny_variant extended_data;
-} granny_obj_texture;
+  bg3_granny_obj_mip_level** images;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_texture;
 
-typedef struct GRANNY_PACK granny_obj_material {
+typedef struct GRANNY_PACK bg3_granny_obj_material {
   uint8_t dummy;
-} granny_obj_material;
+} bg3_granny_obj_material;
 
-typedef struct GRANNY_PACK granny_obj_bone {
+typedef struct GRANNY_PACK bg3_granny_obj_bone {
   char* name;
   int32_t parent_index;
-  granny_transform local_transform;
-  mat4x4 inverse_world_4x4;
+  bg3_granny_transform local_transform;
+  bg3_mat4x4 inverse_world_4x4;
   float lod_error;
-  granny_variant extended_data;
-} granny_obj_bone;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_bone;
 
-typedef struct GRANNY_PACK granny_obj_skeleton {
+typedef struct GRANNY_PACK bg3_granny_obj_skeleton {
   char* name;
   int32_t num_bones;
-  granny_obj_bone* bones;
+  bg3_granny_obj_bone* bones;
   int32_t lod_type;
-  granny_variant extended_data;
-} granny_obj_skeleton;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_skeleton;
 
-typedef struct GRANNY_PACK granny_obj_vertex_annotation_set {
+typedef struct GRANNY_PACK bg3_granny_obj_vertex_annotation_set {
   char* name;
-  granny_variant_array vertex_annotations;
+  bg3_granny_variant_array vertex_annotations;
   int32_t indices_map_from_vertex_to_annotation;
   int32_t num_vertex_annotation_indices;
   int32_t* vertex_annotation_indices;
-} granny_obj_vertex_annotation_set;
+} bg3_granny_obj_vertex_annotation_set;
 
-typedef struct GRANNY_PACK granny_obj_vertex_data {
-  granny_variant_array vertices;
+typedef struct GRANNY_PACK bg3_granny_obj_vertex_data {
+  bg3_granny_variant_array vertices;
   int32_t num_vertex_component_names;
   char** vertex_component_names;
   int32_t num_vertex_annotation_sets;
-  granny_obj_vertex_annotation_set* vertex_annotation_sets;
-} granny_obj_vertex_data;
+  bg3_granny_obj_vertex_annotation_set* vertex_annotation_sets;
+} bg3_granny_obj_vertex_data;
 
-typedef struct GRANNY_PACK granny_obj_material_group {
+typedef struct GRANNY_PACK bg3_granny_obj_material_group {
   uint8_t dummy;
-} granny_obj_material_group;
+} bg3_granny_obj_material_group;
 
-typedef struct GRANNY_PACK granny_obj_tri_annotation_set {
+typedef struct GRANNY_PACK bg3_granny_obj_tri_annotation_set {
   char* name;
-  granny_variant_array tri_annotations;
+  bg3_granny_variant_array tri_annotations;
   int32_t indices_map_from_tri_to_annotation;
   int32_t num_tri_annotation_indices;
   int32_t* tri_annotation_indices;
-} granny_obj_tri_annotation_set;
+} bg3_granny_obj_tri_annotation_set;
 
-typedef struct GRANNY_PACK granny_obj_tri_topology {
+typedef struct GRANNY_PACK bg3_granny_obj_tri_topology {
   int32_t num_groups;
-  granny_obj_material_group* groups;
+  bg3_granny_obj_material_group* groups;
   int32_t num_indices;
   int32_t* indices;
   int32_t num_indices16;
@@ -949,187 +960,187 @@ typedef struct GRANNY_PACK granny_obj_tri_topology {
   int32_t num_triangle_to_bone_indices;
   int32_t* triangle_to_bone_indices;
   int32_t num_tri_annotation_sets;
-  granny_obj_tri_annotation_set* tri_annotation_sets;
-} granny_obj_tri_topology;
+  bg3_granny_obj_tri_annotation_set* tri_annotation_sets;
+} bg3_granny_obj_tri_topology;
 
-typedef struct GRANNY_PACK granny_obj_morph_target {
+typedef struct GRANNY_PACK bg3_granny_obj_morph_target {
   char* scalar_name;
-  granny_obj_vertex_data* vertex_data;
+  bg3_granny_obj_vertex_data* vertex_data;
   int32_t data_is_deltas;
-} granny_obj_morph_target;
+} bg3_granny_obj_morph_target;
 
-typedef struct GRANNY_PACK granny_obj_bone_binding {
+typedef struct GRANNY_PACK bg3_granny_obj_bone_binding {
   char* bone_name;
-  vec3 obb_min;
-  vec3 obb_max;
+  bg3_vec3 obb_min;
+  bg3_vec3 obb_max;
   int32_t num_triangle_indices;
   int32_t* triangle_indices;
-} granny_obj_bone_binding;
+} bg3_granny_obj_bone_binding;
 
-typedef struct GRANNY_PACK granny_obj_mesh {
+typedef struct GRANNY_PACK bg3_granny_obj_mesh {
   char* name;
-  granny_obj_vertex_data* primary_vertex_data;
+  bg3_granny_obj_vertex_data* primary_vertex_data;
   int32_t num_morph_targets;
-  granny_obj_morph_target* morph_targets;
-  granny_obj_tri_topology* primary_topology;
+  bg3_granny_obj_morph_target* morph_targets;
+  bg3_granny_obj_tri_topology* primary_topology;
   int32_t num_material_bindings;
-  granny_obj_material** material_bindings;
+  bg3_granny_obj_material** material_bindings;
   int32_t num_bone_bindings;
-  granny_obj_bone_binding* bone_bindings;
-  granny_variant extended_data;
-} granny_obj_mesh;
+  bg3_granny_obj_bone_binding* bone_bindings;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_mesh;
 
-typedef struct GRANNY_PACK granny_obj_model {
+typedef struct GRANNY_PACK bg3_granny_obj_model {
   char* name;
-  granny_obj_skeleton* skeleton;
-  granny_transform initial_placement;
+  bg3_granny_obj_skeleton* skeleton;
+  bg3_granny_transform initial_placement;
   int32_t num_mesh_bindings;
-  granny_obj_mesh** mesh_bindings;
-  granny_variant extended_data;
-} granny_obj_model;
+  bg3_granny_obj_mesh** mesh_bindings;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_model;
 
-typedef struct GRANNY_PACK granny_obj_track_group {
+typedef struct GRANNY_PACK bg3_granny_obj_track_group {
   uint8_t dummy;
-} granny_obj_track_group;
+} bg3_granny_obj_track_group;
 
-typedef struct GRANNY_PACK granny_obj_animation {
+typedef struct GRANNY_PACK bg3_granny_obj_animation {
   uint8_t dummy;
-} granny_obj_animation;
+} bg3_granny_obj_animation;
 
-typedef struct GRANNY_PACK granny_obj_root {
-  granny_obj_art_tool_info* art_tool_info;
-  granny_obj_exporter_info* exporter_info;
+typedef struct GRANNY_PACK bg3_granny_obj_root {
+  bg3_granny_obj_art_tool_info* art_tool_info;
+  bg3_granny_obj_exporter_info* exporter_info;
   char* from_file_name;
   int32_t num_textures;
-  granny_obj_texture** textures;
+  bg3_granny_obj_texture** textures;
   int32_t num_materials;
-  granny_obj_material** materials;
+  bg3_granny_obj_material** materials;
   int32_t num_skeletons;
-  granny_obj_skeleton** skeletons;
+  bg3_granny_obj_skeleton** skeletons;
   int32_t num_vertex_datas;
-  granny_obj_vertex_data** vertex_datas;
+  bg3_granny_obj_vertex_data** vertex_datas;
   int32_t num_tri_topologies;
-  granny_obj_tri_topology** tri_topologies;
+  bg3_granny_obj_tri_topology** tri_topologies;
   int32_t num_meshes;
-  granny_obj_mesh** meshes;
+  bg3_granny_obj_mesh** meshes;
   int32_t num_models;
-  granny_obj_model** models;
+  bg3_granny_obj_model** models;
   int32_t num_track_groups;
-  granny_obj_track_group** track_groups;
+  bg3_granny_obj_track_group** track_groups;
   int32_t num_animations;
-  granny_obj_animation** animations;
-  granny_variant extended_data;
-} granny_obj_root;
+  bg3_granny_obj_animation** animations;
+  bg3_granny_variant extended_data;
+} bg3_granny_obj_root;
 
 // Larian extensions
 
 // There's probably other vertex formats in the game, but this is the one I
 // care about rn
-typedef struct GRANNY_PACK granny_obj_ls_vertex {
-  vec3 position;
+typedef struct GRANNY_PACK bg3_granny_obj_ls_vertex {
+  bg3_vec3 position;
   int16_t qtangent[4];
-  half texture_coordinates0[2];
-} granny_obj_ls_vertex;
+  bg3_half texture_coordinates0[2];
+} bg3_granny_obj_ls_vertex;
 
-typedef struct GRANNY_PACK granny_obj_ls_format_desc {
+typedef struct GRANNY_PACK bg3_granny_obj_ls_format_desc {
   int8_t stream;
   uint8_t usage;
   uint8_t usage_index;
   uint8_t ref_type;
   uint8_t format;
   uint8_t size;
-} granny_obj_ls_format_desc;
+} bg3_granny_obj_ls_format_desc;
 
-typedef struct GRANNY_PACK granny_obj_ls_user_mesh_properties {
+typedef struct GRANNY_PACK bg3_granny_obj_ls_user_mesh_properties {
   uint32_t flags[4];
   int32_t lod;
   int32_t num_format_descs;
-  granny_obj_ls_format_desc* format_descs;
-  granny_variant extended_data;
+  bg3_granny_obj_ls_format_desc* format_descs;
+  bg3_granny_variant extended_data;
   float lod_distance;
   int32_t is_impostor;
-} granny_obj_ls_user_mesh_properties;
+} bg3_granny_obj_ls_user_mesh_properties;
 
 #define GRANNY_LS_VERSION 3  // expected value of lsm_version
 
-typedef struct GRANNY_PACK granny_obj_ls_mesh {
-  granny_obj_ls_user_mesh_properties* user_mesh_properties;
+typedef struct GRANNY_PACK bg3_granny_obj_ls_mesh {
+  bg3_granny_obj_ls_user_mesh_properties* user_mesh_properties;
   int32_t lsm_version;
-} granny_obj_ls_mesh;
+} bg3_granny_obj_ls_mesh;
 
 // End Granny3D on-disk structures
 
-typedef size_t fn_granny_decompress_data(int type,
-                                         bool endian_swapped,
-                                         uint32_t compressed_size,
-                                         void* compressed_data,
-                                         uint32_t stream0_end,
-                                         uint32_t stream1_end,
-                                         uint32_t uncompressed_size,
-                                         void* uncompressed_data);
-typedef void* fn_granny_begin_file_decompression(int type,
-                                                 bool endian_swapped,
-                                                 uint32_t uncompressed_size,
-                                                 void* uncompressed_data,
-                                                 uint32_t buf_size,
-                                                 void* buffer);
-typedef bool fn_granny_decompress_incremental(void* context,
-                                              uint32_t compressed_size,
-                                              void* compressed_data);
-typedef bool fn_granny_end_file_decompression(void* context);
+typedef size_t bg3_fn_granny_decompress_data(int type,
+                                             bool endian_swapped,
+                                             uint32_t compressed_size,
+                                             void* compressed_data,
+                                             uint32_t stream0_end,
+                                             uint32_t stream1_end,
+                                             uint32_t uncompressed_size,
+                                             void* uncompressed_data);
+typedef void* bg3_fn_granny_begin_file_decompression(int type,
+                                                     bool endian_swapped,
+                                                     uint32_t uncompressed_size,
+                                                     void* uncompressed_data,
+                                                     uint32_t buf_size,
+                                                     void* buffer);
+typedef bool bg3_fn_granny_decompress_incremental(void* context,
+                                                  uint32_t compressed_size,
+                                                  void* compressed_data);
+typedef bool bg3_fn_granny_end_file_decompression(void* context);
 
-typedef struct granny_compressor_ops {
-  fn_granny_decompress_data* decompress_data;
-  fn_granny_begin_file_decompression* begin_file_decompression;
-  fn_granny_decompress_incremental* decompress_incremental;
-  fn_granny_end_file_decompression* end_file_decompression;
-} granny_compressor_ops;
+typedef struct bg3_granny_compressor_ops {
+  bg3_fn_granny_decompress_data* decompress_data;
+  bg3_fn_granny_begin_file_decompression* begin_file_decompression;
+  bg3_fn_granny_decompress_incremental* decompress_incremental;
+  bg3_fn_granny_end_file_decompression* end_file_decompression;
+} bg3_granny_compressor_ops;
 
-typedef struct granny_section {
+typedef struct bg3_granny_section {
   char* data;
   size_t data_len;
   bool owned;
-} granny_section;
+} bg3_granny_section;
 
-typedef struct granny_reader {
+typedef struct bg3_granny_reader {
   char* data;
   size_t data_len;
-  granny_magic magic;
-  granny_header header;
-  granny_section_header* section_headers;
-  granny_section* sections;
-} granny_reader;
+  bg3_granny_magic magic;
+  bg3_granny_header header;
+  bg3_granny_section_header* section_headers;
+  bg3_granny_section* sections;
+} bg3_granny_reader;
 
 // sexp lexer
 #define MATCH(ty)                                                               \
   do {                                                                          \
-    if (l->next.type != sexp_token_type_##ty) {                                 \
+    if (l->next.type != bg3_sexp_token_type_##ty) {                             \
       fprintf(stderr, "expected token " #ty " but got %d instead on line %d\n", \
               l->next.type, l->next.line);                                      \
       return bg3_error_failed;                                                  \
     }                                                                           \
   } while (0)
-#define SLURP(type)        \
-  do {                     \
-    MATCH(type);           \
-    sexp_lexer_advance(l); \
+#define SLURP(type)            \
+  do {                         \
+    MATCH(type);               \
+    bg3_sexp_lexer_advance(l); \
   } while (0)
 
-typedef enum sexp_token_type {
-  sexp_token_type_invalid,
-  sexp_token_type_eof,
-  sexp_token_type_lparen,
-  sexp_token_type_rparen,
-  sexp_token_type_hash,
-  sexp_token_type_symbol,
-  sexp_token_type_string,
-  sexp_token_type_integer,
-  sexp_token_type_decimal,
-} sexp_token_type;
+typedef enum bg3_sexp_token_type {
+  bg3_sexp_token_type_invalid,
+  bg3_sexp_token_type_eof,
+  bg3_sexp_token_type_lparen,
+  bg3_sexp_token_type_rparen,
+  bg3_sexp_token_type_hash,
+  bg3_sexp_token_type_symbol,
+  bg3_sexp_token_type_string,
+  bg3_sexp_token_type_integer,
+  bg3_sexp_token_type_decimal,
+} bg3_sexp_token_type;
 
-typedef struct sexp_token {
-  sexp_token_type type;
-  buffer text;
+typedef struct bg3_sexp_token {
+  bg3_sexp_token_type type;
+  bg3_buffer text;
   union {
     int64_t int_val;
     double float_val;
@@ -1137,69 +1148,69 @@ typedef struct sexp_token {
   int line;
   int col;
   int len;
-} sexp_token;
+} bg3_sexp_token;
 
-typedef struct sexp_lexer {
-  sexp_token next;
+typedef struct bg3_sexp_lexer {
+  bg3_sexp_token next;
   int line;
   int col;
-  cursor c;
-} sexp_lexer;
+  bg3_cursor c;
+} bg3_sexp_lexer;
 
-void sexp_token_copy(sexp_token* dest, sexp_token* src);
-void sexp_lexer_copy(sexp_lexer* dest, sexp_lexer* src);
-void sexp_lexer_init(sexp_lexer* lexer, char const* data, size_t data_len);
-void sexp_lexer_init_cstr(sexp_lexer* lexer, char const* text);
-void sexp_lexer_destroy(sexp_lexer* lexer);
-void sexp_lexer_advance(sexp_lexer* lexer);
+void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src);
+void bg3_sexp_lexer_copy(bg3_sexp_lexer* dest, bg3_sexp_lexer* src);
+void bg3_sexp_lexer_init(bg3_sexp_lexer* lexer, char const* data, size_t data_len);
+void bg3_sexp_lexer_init_cstr(bg3_sexp_lexer* lexer, char const* text);
+void bg3_sexp_lexer_destroy(bg3_sexp_lexer* lexer);
+void bg3_sexp_lexer_advance(bg3_sexp_lexer* lexer);
 
 // indent buffer
-typedef struct indent_buffer {
-  buffer stack;
-  buffer tmp;
-  buffer output;
+typedef struct bg3_indent_buffer {
+  bg3_buffer stack;
+  bg3_buffer tmp;
+  bg3_buffer output;
   uint32_t line_len;
-} indent_buffer;
+} bg3_indent_buffer;
 
-void ibuf_init(indent_buffer* buf);
-void ibuf_destroy(indent_buffer* buf);
-void ibuf_clear(indent_buffer* buf);
-void ibuf_vprintf(indent_buffer* buf, char const* fmt, va_list args);
+void bg3_ibuf_init(bg3_indent_buffer* buf);
+void bg3_ibuf_destroy(bg3_indent_buffer* buf);
+void bg3_ibuf_clear(bg3_indent_buffer* buf);
+void bg3_ibuf_vprintf(bg3_indent_buffer* buf, char const* fmt, va_list args);
 void __attribute__((format(printf, 2, 3)))
-ibuf_printf(indent_buffer* buf, char const* fmt, ...);
-void ibuf_fresh_line(indent_buffer* buf);
-void ibuf_push_align(indent_buffer* buf);
-void ibuf_push(indent_buffer* buf, uint32_t width);
-void ibuf_pop(indent_buffer* buf);
-uint32_t ibuf_get_next_col(indent_buffer* buf);
-uint32_t ibuf_get_indent(indent_buffer* buf);
+bg3_ibuf_printf(bg3_indent_buffer* buf, char const* fmt, ...);
+void bg3_ibuf_fresh_line(bg3_indent_buffer* buf);
+void bg3_ibuf_push_align(bg3_indent_buffer* buf);
+void bg3_ibuf_push(bg3_indent_buffer* buf, uint32_t width);
+void bg3_ibuf_pop(bg3_indent_buffer* buf);
+uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf);
+uint32_t bg3_ibuf_get_indent(bg3_indent_buffer* buf);
 
 // xref index
 #define INDEX_MAGIC   0x5844534C  // 'LSDX'
 #define INDEX_VERSION 1
 
-typedef struct index_entry {
+typedef struct bg3_index_entry {
   uint32_t string_offset;
   uint32_t string_len;
   uint32_t match_index;
   uint32_t match_len;
-} index_entry;
+} bg3_index_entry;
 
-typedef struct index_pak_entry {
+typedef struct bg3_index_pak_entry {
   char name[256];
-} index_pak_entry;
+} bg3_index_pak_entry;
 
-typedef struct index_file_entry {
+typedef struct bg3_index_file_entry {
   uint32_t pak_idx;
   char name[256];
-} index_file_entry;
+} bg3_index_file_entry;
 
-typedef struct index_match_entry {
+typedef struct bg3_index_match_entry {
   uint32_t file_idx;
   uint32_t value;
-} index_match_entry;
+} bg3_index_match_entry;
 
-typedef struct index_header {
+typedef struct bg3_index_header {
   uint32_t magic;
   uint32_t version;
   uint32_t num_paks;
@@ -1207,98 +1218,99 @@ typedef struct index_header {
   uint32_t num_entries;
   uint32_t num_matches;
   uint32_t strings_len;
-} index_header;
+} bg3_index_header;
 
-typedef struct index_reader {
-  index_header header;
-  index_pak_entry* paks;
-  index_file_entry* files;
-  index_entry* entries;
-  index_match_entry* matches;
+typedef struct bg3_index_reader {
+  bg3_index_header header;
+  bg3_index_pak_entry* paks;
+  bg3_index_file_entry* files;
+  bg3_index_entry* entries;
+  bg3_index_match_entry* matches;
   char* strings;
-} index_reader;
+} bg3_index_reader;
 
-bg3_status index_reader_init(index_reader* reader, char* data, size_t data_len);
-void index_reader_destroy(index_reader* reader);
-index_entry* index_reader_find_entry(index_reader* reader, uint32_t string_idx);
+bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t data_len);
+void bg3_index_reader_destroy(bg3_index_reader* reader);
+bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
+                                             uint32_t string_idx);
 
-typedef enum surface_type {
-  surface_none = 0,
-  surface_water = 1,
-  surface_water_electrified = 2,
-  surface_water_frozen = 3,
-  surface_blood = 4,
-  surface_blood_electrified = 5,
-  surface_blood_frozen = 6,
-  surface_poison = 7,
-  surface_oil = 8,
-  surface_lava = 9,
-  surface_grease = 10,
-  surface_wyvern_poison = 11,
-  surface_web = 12,
-  surface_deep_water = 13,
-  surface_vines = 14,
-  surface_fire = 15,
-  surface_acid = 16,
-  surface_trial_fire = 17,
-  surface_black_powder = 18,
-  surface_shadow_cursed_vines = 19,
-  surface_alien_oil = 20,
-  surface_mud = 21,
-  surface_alcohol = 22,
-  surface_invisible_web = 23,
-  surface_blood_silver = 24,
-  surface_chasm = 25,
-  surface_hellfire = 26,
-  surface_caustic_brine = 27,
-  surface_blood_exploding = 28,
-  surface_ash = 29,
-  surface_spike_growth = 30,
-  surface_holy_fire = 31,
-  surface_black_tentacles = 32,
-  surface_overgrowth = 33,
-  surface_purple_worm_poison = 34,
-  surface_serpent_venom = 35,
-  surface_invisible_gith_acid = 36,
-  surface_blade_barrier = 37,
-  surface_sewer = 38,
-  surface_water_cloud = 39,
-  surface_water_cloud_electrified = 40,
-  surface_poison_cloud = 41,
-  surface_explosion_cloud = 42,
-  surface_shockwave_cloud = 43,
-  surface_cloudkill_cloud = 44,
-  surface_malice_cloud = 45,
-  surface_blood_cloud = 46,
-  surface_stinking_cloud = 47,
-  surface_darkness_cloud = 48,
-  surface_fog_cloud = 49,
-  surface_gith_pheromone_gas_cloud = 50,
-  surface_spore_white_cloud = 51,
-  surface_spore_green_cloud = 52,
-  surface_spore_black_cloud = 53,
-  surface_drow_poison_cloud = 54,
-  surface_ice_cloud = 55,
-  surface_potion_healing_cloud = 56,
-  surface_potion_healing_greater_cloud = 57,
-  surface_potion_healing_superior_cloud = 58,
-  surface_potion_healing_supreme_cloud = 59,
-  surface_potion_invisibility_cloud = 60,
-  surface_potion_speed_cloud = 61,
-  surface_potion_vitality_cloud = 62,
-  surface_potion_antitoxin_cloud = 63,
-  surface_potion_resistance_acid_cloud = 64,
-  surface_potion_resistance_cold_cloud = 65,
-  surface_potion_resistance_fire_cloud = 66,
-  surface_potion_resistance_force_cloud = 67,
-  surface_potion_resistance_lightning_cloud = 68,
-  surface_potion_resistance_poison_cloud = 69,
-  surface_spore_pink_cloud = 70,
-  surface_black_powder_detonation_cloud = 71,
-  surface_void_cloud = 72,
-  surface_crawler_mucus_cloud = 73,
-  surface_cloudkill6_cloud = 74,
-} surface_type;
+typedef enum bg3_surface_type {
+  bg3_surface_none = 0,
+  bg3_surface_water = 1,
+  bg3_surface_water_electrified = 2,
+  bg3_surface_water_frozen = 3,
+  bg3_surface_blood = 4,
+  bg3_surface_blood_electrified = 5,
+  bg3_surface_blood_frozen = 6,
+  bg3_surface_poison = 7,
+  bg3_surface_oil = 8,
+  bg3_surface_lava = 9,
+  bg3_surface_grease = 10,
+  bg3_surface_wyvern_poison = 11,
+  bg3_surface_web = 12,
+  bg3_surface_deep_water = 13,
+  bg3_surface_vines = 14,
+  bg3_surface_fire = 15,
+  bg3_surface_acid = 16,
+  bg3_surface_trial_fire = 17,
+  bg3_surface_black_powder = 18,
+  bg3_surface_shadow_cursed_vines = 19,
+  bg3_surface_alien_oil = 20,
+  bg3_surface_mud = 21,
+  bg3_surface_alcohol = 22,
+  bg3_surface_invisible_web = 23,
+  bg3_surface_blood_silver = 24,
+  bg3_surface_chasm = 25,
+  bg3_surface_hellfire = 26,
+  bg3_surface_caustic_brine = 27,
+  bg3_surface_blood_exploding = 28,
+  bg3_surface_ash = 29,
+  bg3_surface_spike_growth = 30,
+  bg3_surface_holy_fire = 31,
+  bg3_surface_black_tentacles = 32,
+  bg3_surface_overgrowth = 33,
+  bg3_surface_purple_worm_poison = 34,
+  bg3_surface_serpent_venom = 35,
+  bg3_surface_invisible_gith_acid = 36,
+  bg3_surface_blade_barrier = 37,
+  bg3_surface_sewer = 38,
+  bg3_surface_water_cloud = 39,
+  bg3_surface_water_cloud_electrified = 40,
+  bg3_surface_poison_cloud = 41,
+  bg3_surface_explosion_cloud = 42,
+  bg3_surface_shockwave_cloud = 43,
+  bg3_surface_cloudkill_cloud = 44,
+  bg3_surface_malice_cloud = 45,
+  bg3_surface_blood_cloud = 46,
+  bg3_surface_stinking_cloud = 47,
+  bg3_surface_darkness_cloud = 48,
+  bg3_surface_fog_cloud = 49,
+  bg3_surface_gith_pheromone_gas_cloud = 50,
+  bg3_surface_spore_white_cloud = 51,
+  bg3_surface_spore_green_cloud = 52,
+  bg3_surface_spore_black_cloud = 53,
+  bg3_surface_drow_poison_cloud = 54,
+  bg3_surface_ice_cloud = 55,
+  bg3_surface_potion_healing_cloud = 56,
+  bg3_surface_potion_healing_greater_cloud = 57,
+  bg3_surface_potion_healing_superior_cloud = 58,
+  bg3_surface_potion_healing_supreme_cloud = 59,
+  bg3_surface_potion_invisibility_cloud = 60,
+  bg3_surface_potion_speed_cloud = 61,
+  bg3_surface_potion_vitality_cloud = 62,
+  bg3_surface_potion_antitoxin_cloud = 63,
+  bg3_surface_potion_resistance_acid_cloud = 64,
+  bg3_surface_potion_resistance_cold_cloud = 65,
+  bg3_surface_potion_resistance_fire_cloud = 66,
+  bg3_surface_potion_resistance_force_cloud = 67,
+  bg3_surface_potion_resistance_lightning_cloud = 68,
+  bg3_surface_potion_resistance_poison_cloud = 69,
+  bg3_surface_spore_pink_cloud = 70,
+  bg3_surface_black_powder_detonation_cloud = 71,
+  bg3_surface_void_cloud = 72,
+  bg3_surface_crawler_mucus_cloud = 73,
+  bg3_surface_cloudkill6_cloud = 74,
+} bg3_surface_type;
 
 #define AIGRID_VERSION 21
 
@@ -1367,11 +1379,11 @@ typedef enum surface_type {
 #define AIGRID_TILE_IRREPLACEABLE_SURFACE    0x4000000000000000ULL
 #define AIGRID_TILE_IRREPLACEABLE_CLOUD      0x8000000000000000ULL
 
-typedef struct aigrid_header {
+typedef struct bg3_aigrid_header {
   uint32_t version;
-} aigrid_header;
+} bg3_aigrid_header;
 
-typedef struct aigrid_subgrid_header {
+typedef struct bg3_aigrid_subgrid_header {
   // this is aigrid_uuid_hash(object_uuid) + some offset that gets added when
   // there's duplicates. not sure how that works yet. I suspect it might be
   // constructed from patch chunk x/y coordinates?
@@ -1383,9 +1395,9 @@ typedef struct aigrid_subgrid_header {
   float x;
   float y;
   float z;
-} aigrid_subgrid_header;
+} bg3_aigrid_subgrid_header;
 
-typedef struct aigrid_tile {
+typedef struct bg3_aigrid_tile {
   uint64_t state;
   // these appear to be quantized: (short)(float_val * 100.0 * 0.5 + 0.5)
   int16_t height;
@@ -1394,47 +1406,48 @@ typedef struct aigrid_tile {
   int16_t metadata_idx;
   // runtime only, discarded on load.
   int16_t surface;
-} aigrid_tile;
+} bg3_aigrid_tile;
 
-static inline void aigrid_tile_set_ground_surface(aigrid_tile* tile,
-                                                  surface_type surface) {
+static inline void bg3_aigrid_tile_set_ground_surface(bg3_aigrid_tile* tile,
+                                                      bg3_surface_type surface) {
   tile->state &= ~AIGRID_TILE_SURFACE_GROUND_MASK;
   tile->state |= ((uint64_t)surface << AIGRID_TILE_SURFACE_GROUND_SHIFT) &
                  AIGRID_TILE_SURFACE_GROUND_MASK;
 }
 
-static inline surface_type aigrid_tile_get_ground_surface(aigrid_tile* tile) {
-  return (surface_type)((tile->state & AIGRID_TILE_SURFACE_GROUND_MASK) >>
-                        AIGRID_TILE_SURFACE_GROUND_SHIFT);
+static inline bg3_surface_type bg3_aigrid_tile_get_ground_surface(bg3_aigrid_tile* tile) {
+  return (bg3_surface_type)((tile->state & AIGRID_TILE_SURFACE_GROUND_MASK) >>
+                            AIGRID_TILE_SURFACE_GROUND_SHIFT);
 }
 
-static inline void aigrid_tile_set_cloud_surface(aigrid_tile* tile,
-                                                 surface_type surface) {
-  if (surface != surface_none) {
-    surface = (surface_type)(surface - AIGRID_TILE_SURFACE_CLOUD_OFFSET);
+static inline void bg3_aigrid_tile_set_cloud_surface(bg3_aigrid_tile* tile,
+                                                     bg3_surface_type surface) {
+  if (surface != bg3_surface_none) {
+    surface = (bg3_surface_type)(surface - AIGRID_TILE_SURFACE_CLOUD_OFFSET);
   }
   tile->state &= ~AIGRID_TILE_SURFACE_CLOUD_MASK;
   tile->state |= ((uint64_t)surface << AIGRID_TILE_SURFACE_CLOUD_SHIFT) &
                  AIGRID_TILE_SURFACE_CLOUD_MASK;
 }
 
-static inline surface_type aigrid_tile_get_cloud_surface(aigrid_tile* tile) {
-  surface_type surface = (surface_type)((tile->state & AIGRID_TILE_SURFACE_CLOUD_MASK) >>
-                                        AIGRID_TILE_SURFACE_CLOUD_SHIFT);
-  if (surface != surface_none) {
-    surface = (surface_type)(surface + AIGRID_TILE_SURFACE_CLOUD_OFFSET);
+static inline bg3_surface_type bg3_aigrid_tile_get_cloud_surface(bg3_aigrid_tile* tile) {
+  bg3_surface_type surface =
+      (bg3_surface_type)((tile->state & AIGRID_TILE_SURFACE_CLOUD_MASK) >>
+                         AIGRID_TILE_SURFACE_CLOUD_SHIFT);
+  if (surface != bg3_surface_none) {
+    surface = (bg3_surface_type)(surface + AIGRID_TILE_SURFACE_CLOUD_OFFSET);
   }
   return surface;
 }
 
-typedef struct aigrid_subgrid {
-  aigrid_subgrid_header header;
+typedef struct bg3_aigrid_subgrid {
+  bg3_aigrid_subgrid_header header;
   char object_uuid[UUID_STRING_LEN];
   char template_uuid[UUID_STRING_LEN];
-  aigrid_tile* tiles;
-} aigrid_subgrid;
+  bg3_aigrid_tile* tiles;
+} bg3_aigrid_subgrid;
 
-typedef struct aigrid_layer_entry {
+typedef struct bg3_aigrid_layer_entry {
   // position of the subgrid tile modified by the layer entry
   uint16_t x;
   uint16_t y;
@@ -1442,107 +1455,107 @@ typedef struct aigrid_layer_entry {
   uint64_t state;
   float height;
   uint32_t unused;  // this is discarded when reading
-} aigrid_layer_entry;
+} bg3_aigrid_layer_entry;
 
-typedef struct aigrid_layer {
+typedef struct bg3_aigrid_layer {
   // do any layers have an id that's not a level template id? other than the
   // first one.
-  uuid level_template;
-  hash lookup;
+  bg3_uuid level_template;
+  bg3_hash lookup;
   uint32_t num_entries;
   uint32_t cap_entries;
-  aigrid_layer_entry* entries;
-} aigrid_layer;
+  bg3_aigrid_layer_entry* entries;
+} bg3_aigrid_layer;
 
-typedef struct aigrid_file {
-  arena alloc;
-  cursor c;
-  aigrid_header header;
+typedef struct bg3_aigrid_file {
+  bg3_arena alloc;
+  bg3_cursor c;
+  bg3_aigrid_header header;
   char file_uuid[UUID_STRING_LEN];
   uint32_t num_subgrids;
   uint32_t cap_subgrids;
-  aigrid_subgrid* subgrids;
+  bg3_aigrid_subgrid* subgrids;
   uint32_t num_layers;
   uint32_t cap_layers;
-  aigrid_layer* layers;
-} aigrid_file;
+  bg3_aigrid_layer* layers;
+} bg3_aigrid_file;
 
-bg3_status aigrid_file_init(aigrid_file* file, char* data, size_t data_len);
-void aigrid_file_init_new(aigrid_file* file);
-void aigrid_file_destroy(aigrid_file* file);
-aigrid_subgrid* aigrid_file_create_subgrid(aigrid_file* file,
-                                           uint32_t width,
-                                           uint32_t height,
-                                           uuid* object_uuid,
-                                           uuid* template_uuid,
-                                           int16_t tile_x,
-                                           int16_t tile_y,
-                                           vec3 world_pos);
-void aigrid_file_cook_patch(aigrid_file* file,
-                            uuid* object_uuid,
-                            vec3 world_pos,
-                            patch_file* patch);
-bg3_status aigrid_file_write(aigrid_file* file, char const* path);
+bg3_status bg3_aigrid_file_init(bg3_aigrid_file* file, char* data, size_t data_len);
+void bg3_aigrid_file_init_new(bg3_aigrid_file* file);
+void bg3_aigrid_file_destroy(bg3_aigrid_file* file);
+bg3_aigrid_subgrid* bg3_aigrid_file_create_subgrid(bg3_aigrid_file* file,
+                                                   uint32_t width,
+                                                   uint32_t height,
+                                                   bg3_uuid* object_uuid,
+                                                   bg3_uuid* template_uuid,
+                                                   int16_t tile_x,
+                                                   int16_t tile_y,
+                                                   bg3_vec3 world_pos);
+void bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
+                                bg3_uuid* object_uuid,
+                                bg3_vec3 world_pos,
+                                bg3_patch_file* patch);
+bg3_status bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path);
 
 // osiris
 #define OSIRIS_VERSION_MAJOR 1
 #define OSIRIS_VERSION_MINOR 13
 #define OSIRIS_STRING_MASK   0xAD
 
-typedef enum osiris_prim_type {
-  osiris_prim_type_undef = 0,
-  osiris_prim_type_integer = 1,
-  osiris_prim_type_integer64 = 2,
-  osiris_prim_type_real = 3,
-  osiris_prim_type_string = 4,
-  osiris_prim_type_guidstring = 5,
-  osiris_prim_type_enum = 0xFFFFFFFF,
-} osiris_prim_type;
+typedef enum bg3_osiris_prim_type {
+  bg3_osiris_prim_type_undef = 0,
+  bg3_osiris_prim_type_integer = 1,
+  bg3_osiris_prim_type_integer64 = 2,
+  bg3_osiris_prim_type_real = 3,
+  bg3_osiris_prim_type_string = 4,
+  bg3_osiris_prim_type_guidstring = 5,
+  bg3_osiris_prim_type_enum = 0xFFFFFFFF,
+} bg3_osiris_prim_type;
 
-typedef enum osiris_function_type : uint8_t {
-  osiris_function_invalid,
-  osiris_function_event = 1,
-  osiris_function_div_query = 2,
-  osiris_function_div_call = 3,
-  osiris_function_db = 4,
-  osiris_function_proc = 5,
-  osiris_function_sys_query = 6,
-  osiris_function_sys_call = 7,
-  osiris_function_query = 8,
-} osiris_function_type;
+typedef enum bg3_osiris_function_type : uint8_t {
+  bg3_osiris_function_invalid,
+  bg3_osiris_function_event = 1,
+  bg3_osiris_function_div_query = 2,
+  bg3_osiris_function_div_call = 3,
+  bg3_osiris_function_db = 4,
+  bg3_osiris_function_proc = 5,
+  bg3_osiris_function_sys_query = 6,
+  bg3_osiris_function_sys_call = 7,
+  bg3_osiris_function_query = 8,
+} bg3_osiris_function_type;
 
-typedef enum osiris_compare_op : uint32_t {
-  osiris_compare_less = 0,
-  osiris_compare_less_equal = 1,
-  osiris_compare_greater = 2,
-  osiris_compare_greater_equal = 3,
-  osiris_compare_equal = 4,
-  osiris_compare_not_equal = 5,
-} osiris_compare_op;
+typedef enum bg3_osiris_compare_op : uint32_t {
+  bg3_osiris_compare_less = 0,
+  bg3_osiris_compare_less_equal = 1,
+  bg3_osiris_compare_greater = 2,
+  bg3_osiris_compare_greater_equal = 3,
+  bg3_osiris_compare_equal = 4,
+  bg3_osiris_compare_not_equal = 5,
+} bg3_osiris_compare_op;
 
-typedef enum osiris_rete_node_type : uint32_t {
-  osiris_rete_node_invalid = 0,
-  osiris_rete_node_db = 1,
+typedef enum bg3_osiris_rete_node_type : uint32_t {
+  bg3_osiris_rete_node_invalid = 0,
+  bg3_osiris_rete_node_db = 1,
   // "events" here include other non-db entry points like procs and queries
   // these "left side" nodes for queries seem to represent the actual
   // definitions of queries and procs, distinct from the "right side" (type 9)
   // query nodes and proc actions in the action list for the terminal node of
   // a production
-  osiris_rete_node_event = 2,
-  osiris_rete_node_div_query = 3,
-  osiris_rete_node_join_and = 4,
-  osiris_rete_node_join_and_not = 5,
-  osiris_rete_node_compare = 6,
-  osiris_rete_node_terminal = 7,
-  osiris_rete_node_sys_query = 8,
-  osiris_rete_node_query = 9,
-} osiris_rete_node_type;
+  bg3_osiris_rete_node_event = 2,
+  bg3_osiris_rete_node_div_query = 3,
+  bg3_osiris_rete_node_join_and = 4,
+  bg3_osiris_rete_node_join_and_not = 5,
+  bg3_osiris_rete_node_compare = 6,
+  bg3_osiris_rete_node_terminal = 7,
+  bg3_osiris_rete_node_sys_query = 8,
+  bg3_osiris_rete_node_query = 9,
+} bg3_osiris_rete_node_type;
 
-typedef enum osiris_edge_direction : uint32_t {
-  osiris_edge_direction_none,
-  osiris_edge_direction_left,
-  osiris_edge_direction_right,
-} osiris_edge_direction;
+typedef enum bg3_osiris_edge_direction : uint32_t {
+  bg3_osiris_edge_direction_none,
+  bg3_osiris_edge_direction_left,
+  bg3_osiris_edge_direction_right,
+} bg3_osiris_edge_direction;
 
 // The lifecycle is a bit odd here.
 // sleeping = goal is not active but not completed
@@ -1552,12 +1565,12 @@ typedef enum osiris_edge_direction : uint32_t {
 //
 // in a save file, the only observed states are 0, 2, and 7 corresponding to
 // active, not started, and completed goals.
-typedef enum osiris_goal_state : uint8_t {
-  osiris_goal_state_active = 0,
-  osiris_goal_state_finalised = 1,
-  osiris_goal_state_sleeping = 2,
-  osiris_goal_state_completed = 4,
-} osiris_goal_state;
+typedef enum bg3_osiris_goal_state : uint8_t {
+  bg3_osiris_goal_state_active = 0,
+  bg3_osiris_goal_state_finalised = 1,
+  bg3_osiris_goal_state_sleeping = 2,
+  bg3_osiris_goal_state_completed = 4,
+} bg3_osiris_goal_state;
 
 // There's a feature in the Osiris save format that does not seem to be used in
 // BG3 in which a goal can have multiple parents. The subgoal combiner field on
@@ -1567,32 +1580,32 @@ typedef enum osiris_goal_state : uint8_t {
 // In practice the combiner is only set to "or" for top level goals which are
 // always enabled, but this doesn't matter because the check will always pass
 // anyway.
-typedef enum osiris_goal_combiner : uint8_t {
-  osiris_goal_combiner_or = 0,   // initialize if any parent is complete
-  osiris_goal_combiner_and = 1,  // initialize if all parents are complete
-} osiris_goal_combiner;
+typedef enum bg3_osiris_goal_combiner : uint8_t {
+  bg3_osiris_goal_combiner_or = 0,   // initialize if any parent is complete
+  bg3_osiris_goal_combiner_and = 1,  // initialize if all parents are complete
+} bg3_osiris_goal_combiner;
 
-typedef struct osiris_type_info {
+typedef struct bg3_osiris_type_info {
   char const* name;
   uint8_t index;
   uint8_t alias_index;
   uint8_t enum_index;
-} osiris_type_info;
+} bg3_osiris_type_info;
 
-typedef struct osiris_enum_entry {
+typedef struct bg3_osiris_enum_entry {
   char* name;
   uint64_t value;
-} osiris_enum_entry;
+} bg3_osiris_enum_entry;
 
-typedef struct osiris_enum_info {
+typedef struct bg3_osiris_enum_info {
   uint8_t index;
   uint32_t num_entries;
   uint32_t cap_entries;
-  osiris_enum_entry* entries;
-} osiris_enum_info;
+  bg3_osiris_enum_entry* entries;
+} bg3_osiris_enum_info;
 
-typedef struct osiris_variant {
-  osiris_prim_type type;
+typedef struct bg3_osiris_variant {
+  bg3_osiris_prim_type type;
   uint32_t index;
   union {
     int32_t integer;
@@ -1600,12 +1613,12 @@ typedef struct osiris_variant {
     float real;
     char* string;
   };
-} osiris_variant;
+} bg3_osiris_variant;
 
 #define OSIRIS_OUT_PARAM_MASK(i) (1 << ((i & 0xF8) + (7 - (i & 7))))
 
-typedef struct osiris_function_info {
-  osiris_function_type type;
+typedef struct bg3_osiris_function_info {
+  bg3_osiris_function_type type;
   char* name;
   uint32_t line;
   uint32_t num_conds;    // shown as 'Cond#' in GenerateFunctionList output
@@ -1622,18 +1635,18 @@ typedef struct osiris_function_info {
   uint8_t num_params;
   uint8_t cap_params;
   uint16_t* params;
-} osiris_function_info;
+} bg3_osiris_function_info;
 
-typedef struct osiris_rete_node_edge {
+typedef struct bg3_osiris_rete_node_edge {
   uint32_t node_id;
-  osiris_edge_direction direction;
+  bg3_osiris_edge_direction direction;
   uint32_t goal_id;
-} osiris_rete_node_edge;
+} bg3_osiris_rete_node_edge;
 
 // Some of these fields have more specific names than what I've defined here,
 // but they seem to be tautological (they can be fully determined from the
 // value of other fields). Weird.
-typedef struct osiris_binding {
+typedef struct bg3_osiris_binding {
   uint8_t is_variable;
   uint8_t is_grounded;
   uint8_t unused0;
@@ -1645,26 +1658,26 @@ typedef struct osiris_binding {
   // used.
   uint8_t is_dead;
   uint8_t is_live;
-  osiris_variant value;
-} osiris_binding;
+  bg3_osiris_variant value;
+} bg3_osiris_binding;
 
-typedef struct osiris_action {
+typedef struct bg3_osiris_action {
   char* function;
   uint8_t num_arguments;
   uint8_t cap_arguments;
-  osiris_binding* arguments;
+  bg3_osiris_binding* arguments;
   uint8_t retract;
   uint32_t completed_goal_id;
-} osiris_action;
+} bg3_osiris_action;
 
-typedef struct osiris_rete_node_parent {
+typedef struct bg3_osiris_rete_node_parent {
   uint32_t node_id;
   uint32_t adaptor;
   // for joins which do not have their own temp db, these reference
   // the nearest parent node which has a db and the child edge which
   // reaches this node.
   uint32_t db_node;
-  osiris_rete_node_edge db_edge;
+  bg3_osiris_rete_node_edge db_edge;
   // number of edges between this node and the nearest db-having node (the
   // "token generator"). The distance is a bit quirky:
   //   - for a left distance, if no db is in the path to the root, the value is
@@ -1673,10 +1686,10 @@ typedef struct osiris_rete_node_parent {
   //   - when following a left chain, it's the shortest distance considering
   //     the right parents of the left parent chain as well.
   int8_t db_distance;
-} osiris_rete_node_parent;
+} bg3_osiris_rete_node_parent;
 
-typedef struct osiris_rete_node {
-  osiris_rete_node_type type;
+typedef struct bg3_osiris_rete_node {
+  bg3_osiris_rete_node_type type;
   char* name;
   uint32_t node_id;
   uint32_t db;
@@ -1685,68 +1698,68 @@ typedef struct osiris_rete_node {
     struct {
       uint32_t num_children;
       uint32_t cap_children;
-      osiris_rete_node_edge* children;
+      bg3_osiris_rete_node_edge* children;
     } trigger;
     struct {
-      osiris_rete_node_edge child;
-      osiris_rete_node_parent left_parent;
-      osiris_rete_node_parent right_parent;
+      bg3_osiris_rete_node_edge child;
+      bg3_osiris_rete_node_parent left_parent;
+      bg3_osiris_rete_node_parent right_parent;
     } join;
     struct {
-      osiris_rete_node_edge child;
-      osiris_rete_node_parent parent;
-      osiris_compare_op opcode;
-      osiris_variant left_value;
-      osiris_variant right_value;
+      bg3_osiris_rete_node_edge child;
+      bg3_osiris_rete_node_parent parent;
+      bg3_osiris_compare_op opcode;
+      bg3_osiris_variant left_value;
+      bg3_osiris_variant right_value;
       uint8_t left_var;
       uint8_t right_var;
     } compare;
     struct {
-      osiris_rete_node_edge child;
-      osiris_rete_node_parent parent;
+      bg3_osiris_rete_node_edge child;
+      bg3_osiris_rete_node_parent parent;
       uint32_t num_actions;
-      osiris_action* actions;
+      bg3_osiris_action* actions;
       uint8_t num_vars;
-      osiris_binding* vars;
+      bg3_osiris_binding* vars;
       uint32_t line;
       uint8_t is_query;
     } terminal;
   };
-} osiris_rete_node;
+} bg3_osiris_rete_node;
 
-typedef struct osiris_rete_adaptor_value {
+typedef struct bg3_osiris_rete_adaptor_value {
   uint8_t index;
-  osiris_variant value;
-} osiris_rete_adaptor_value;
+  bg3_osiris_variant value;
+} bg3_osiris_rete_adaptor_value;
 
-typedef struct osiris_rete_adaptor_pair {
+typedef struct bg3_osiris_rete_adaptor_pair {
   uint8_t left;
   uint8_t right;
-} osiris_rete_adaptor_pair;
+} bg3_osiris_rete_adaptor_pair;
 
-typedef struct osiris_rete_adaptor {
+typedef struct bg3_osiris_rete_adaptor {
   uint32_t adaptor_id;
   uint8_t num_values;
-  osiris_rete_adaptor_value* values;
+  bg3_osiris_rete_adaptor_value* values;
   uint8_t num_vars;
   uint8_t* vars;
   uint8_t num_pairs;
-  osiris_rete_adaptor_pair* pairs;
-} osiris_rete_adaptor;
+  bg3_osiris_rete_adaptor_pair* pairs;
+} bg3_osiris_rete_adaptor;
 
-typedef struct osiris_row {
-  osiris_variant* columns;
-} osiris_row;
+typedef struct bg3_osiris_row {
+  bg3_osiris_variant* columns;
+} bg3_osiris_row;
 
-typedef struct osiris_rete_db {
+typedef struct bg3_osiris_rete_db {
   uint32_t db_id;
   uint8_t num_schema_columns;
   uint16_t* schema_columns;
   uint32_t num_rows;
-  osiris_row* rows;
-} osiris_rete_db;
+  bg3_osiris_row* rows;
+} bg3_osiris_rete_db;
 
-typedef struct osiris_goal {
+typedef struct bg3_osiris_goal {
   uint32_t goal_id;
   uint32_t line;  // only used by osiris_save_builder
   char* name;
@@ -1755,21 +1768,21 @@ typedef struct osiris_goal {
   uint32_t num_children;
   uint32_t cap_children;
   uint32_t* children;
-  osiris_goal_combiner combiner;
-  osiris_goal_state state;
+  bg3_osiris_goal_combiner combiner;
+  bg3_osiris_goal_state state;
   uint32_t num_init_actions;
   uint32_t cap_init_actions;
-  osiris_action* init_actions;
+  bg3_osiris_action* init_actions;
   uint32_t num_exit_actions;
   uint32_t cap_exit_actions;
-  osiris_action* exit_actions;
-} osiris_goal;
+  bg3_osiris_action* exit_actions;
+} bg3_osiris_goal;
 
-typedef struct osiris_save {
-  arena alloc;
-  buffer out;
-  indent_buffer text_out;
-  cursor c;
+typedef struct bg3_osiris_save {
+  bg3_arena alloc;
+  bg3_buffer out;
+  bg3_indent_buffer text_out;
+  bg3_cursor c;
   uint8_t string_mask;
   char* version;
   uint8_t version_major;
@@ -1780,56 +1793,60 @@ typedef struct osiris_save {
   uint32_t debug_flags;
   uint32_t cap_type_infos;
   uint32_t num_type_infos;
-  osiris_type_info* type_infos;
+  bg3_osiris_type_info* type_infos;
   uint32_t cap_enums;
   uint32_t num_enums;
-  osiris_enum_info* enums;
+  bg3_osiris_enum_info* enums;
   uint32_t num_div_objects;  // always 0 in BG3 afaict
   uint32_t cap_functions;
   uint32_t num_functions;
-  osiris_function_info* functions;
+  bg3_osiris_function_info* functions;
   uint32_t cap_rete_nodes;
   uint32_t num_rete_nodes;
-  osiris_rete_node* rete_nodes;
+  bg3_osiris_rete_node* rete_nodes;
   // yes, it's consistently misspelled..
   uint32_t cap_rete_adaptors;
   uint32_t num_rete_adaptors;
-  osiris_rete_adaptor* rete_adaptors;
+  bg3_osiris_rete_adaptor* rete_adaptors;
   uint32_t cap_dbs;
   uint32_t num_dbs;
-  osiris_rete_db* dbs;
+  bg3_osiris_rete_db* dbs;
   uint32_t cap_goals;
   uint32_t num_goals;
-  osiris_goal* goals;
+  bg3_osiris_goal* goals;
   uint32_t num_global_actions;
-  osiris_action* global_actions;
-} osiris_save;
+  bg3_osiris_action* global_actions;
+} bg3_osiris_save;
 
-void osiris_save_destroy(osiris_save* reader);
-void osiris_save_init(osiris_save* reader);
-bg3_status osiris_save_init_binary(osiris_save* reader, char* data, size_t data_len);
-bg3_status osiris_save_write_binary(osiris_save* save, char const* path);
-bg3_status osiris_save_write_sexp(osiris_save* save, char const* path, bool verbose);
+void bg3_osiris_save_destroy(bg3_osiris_save* reader);
+void bg3_osiris_save_init(bg3_osiris_save* reader);
+bg3_status bg3_osiris_save_init_binary(bg3_osiris_save* reader,
+                                       char* data,
+                                       size_t data_len);
+bg3_status bg3_osiris_save_write_binary(bg3_osiris_save* save, char const* path);
+bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
+                                      char const* path,
+                                      bool verbose);
 
 #define OSIRIS_MAX_LOCALS 32
 
-typedef struct osiris_save_builder {
-  osiris_save save;
-  hash global_symbols;
-  hash local_symbols;
-  sexp_token current_toplevel;
-  sexp_token current_item;
+typedef struct bg3_osiris_save_builder {
+  bg3_osiris_save save;
+  bg3_hash global_symbols;
+  bg3_hash local_symbols;
+  bg3_sexp_token current_toplevel;
+  bg3_sexp_token current_item;
   uint32_t current_goal_id;
-  osiris_binding current_vars[OSIRIS_MAX_LOCALS];
+  bg3_osiris_binding current_vars[OSIRIS_MAX_LOCALS];
   uint32_t next_var;
-} osiris_save_builder;
+} bg3_osiris_save_builder;
 
-void osiris_save_builder_init(osiris_save_builder* builder);
-void osiris_save_builder_destroy(osiris_save_builder* builder);
-bg3_status osiris_save_builder_parse(osiris_save_builder* builder,
-                                     char* data,
-                                     size_t data_len);
-bg3_status osiris_save_builder_finish(osiris_save_builder* builder);
+void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder);
+void bg3_osiris_save_builder_destroy(bg3_osiris_save_builder* builder);
+bg3_status bg3_osiris_save_builder_parse(bg3_osiris_save_builder* builder,
+                                         char* data,
+                                         size_t data_len);
+bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder);
 
 #ifdef __cplusplus
 }
@@ -1883,11 +1900,11 @@ void __attribute__((noreturn)) bg3_panic(char const* fmt, ...) {
   abort();
 }
 
-static void uuid_random(uuid* id) {
-  arc4random_buf(id, sizeof(uuid));
+static void uuid_random(bg3_uuid* id) {
+  arc4random_buf(id, sizeof(bg3_uuid));
 }
 
-static bool uuid_parse(uuid* id, char const* buf) {
+static bool uuid_parse(bg3_uuid* id, char const* buf) {
   return 7 == sscanf(buf, "%08x-%04hx-%04hx-%04hx-%04hx%04hx%04hx\n", &id->word,
                      &id->half[0], &id->half[1], &id->half[2], &id->half[3], &id->half[4],
                      &id->half[5]);
@@ -1935,14 +1952,14 @@ void uuid_to_string(uuid const* id, char out[48]) {
   uuid_to_string_neon(id, out);
 }
 #else  // BG3DO_PLATFORM_MACOS
-void uuid_to_string(uuid const* id, char out[48]) {
+void uuid_to_string(bg3_uuid const* id, char out[48]) {
   memset(out, 0, 48);
   snprintf(out, 48, "%08x-%04hx-%04hx-%04hx-%04hx%04hx%04hx\n", id->word, id->half[0],
            id->half[1], id->half[2], id->half[3], id->half[4], id->half[5]);
 }
 #endif
 
-bg3_status mapped_file_init_ro(mapped_file* file, char const* path) {
+bg3_status bg3_mapped_file_init_ro(bg3_mapped_file* file, char const* path) {
   file->fd = open(path, O_RDONLY);
   if (file->fd < 0) {
     return bg3_error_libc;
@@ -1963,7 +1980,7 @@ bg3_status mapped_file_init_ro(mapped_file* file, char const* path) {
   return bg3_success;
 }
 
-bg3_status mapped_file_init_rw(mapped_file* file, char const* path) {
+bg3_status mapped_file_init_rw(bg3_mapped_file* file, char const* path) {
   file->fd = open(path, O_RDWR);
   if (file->fd < 0) {
     return bg3_error_libc;
@@ -1983,9 +2000,9 @@ bg3_status mapped_file_init_rw(mapped_file* file, char const* path) {
   return bg3_success;
 }
 
-bg3_status mapped_file_init_rw_trunc(mapped_file* file,
-                                     char const* path,
-                                     size_t new_size) {
+bg3_status bg3_mapped_file_init_rw_trunc(bg3_mapped_file* file,
+                                         char const* path,
+                                         size_t new_size) {
   file->fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0666);
   if (file->fd < 0) {
     return bg3_error_libc;
@@ -2008,14 +2025,17 @@ bg3_status mapped_file_init_rw_trunc(mapped_file* file,
   return bg3_success;
 }
 
-void mapped_file_destroy(mapped_file* file) {
+void bg3_mapped_file_destroy(bg3_mapped_file* file) {
   if (file->data) {
     munmap(file->data, file->data_len);
   }
   close(file->fd);
 }
 
-bg3_status mapped_file_read(mapped_file* file, void* dest, size_t offset, size_t len) {
+bg3_status bg3_mapped_file_read(bg3_mapped_file* file,
+                                void* dest,
+                                size_t offset,
+                                size_t len) {
   if (offset > file->data_len || len > file->data_len - offset) {
     return bg3_error_overflow;
   }
@@ -2023,7 +2043,7 @@ bg3_status mapped_file_read(mapped_file* file, void* dest, size_t offset, size_t
   return bg3_success;
 }
 
-int mkdirp(char* path) {
+int bg3_mkdirp(char* path) {
   for (char* p = path; *p; ++p) {
     if (*p == '/') {
       bool ok;
@@ -2041,7 +2061,7 @@ int mkdirp(char* path) {
 }
 
 static void* do_parallel_for(void* arg) {
-  parallel_for_thread* tcb = (parallel_for_thread*)arg;
+  bg3_parallel_for_thread* tcb = (bg3_parallel_for_thread*)arg;
   tcb->status = tcb->callback(tcb);
   return 0;
 }
@@ -2056,14 +2076,14 @@ void __attribute__((constructor)) parallel_for_init() {
 #endif
 }
 
-int parallel_for_ncpu() {
+int bg3_parallel_for_ncpu() {
   return ncpu;
 }
 
-int parallel_for_n(parallel_for_cb* callback, void* user_data, int nthreads) {
-  parallel_for_sync sync = {};
-  parallel_for_thread* tcb =
-      (parallel_for_thread*)alloca(sizeof(parallel_for_thread) * nthreads);
+int bg3_parallel_for_n(bg3_parallel_for_cb* callback, void* user_data, int nthreads) {
+  bg3_parallel_for_sync sync = {};
+  bg3_parallel_for_thread* tcb =
+      (bg3_parallel_for_thread*)alloca(sizeof(bg3_parallel_for_thread) * nthreads);
   if (pthread_cond_init(&sync.cond, 0)) {
     bg3_panic("pthread_cond_init failed");
   }
@@ -2092,11 +2112,11 @@ int parallel_for_n(parallel_for_cb* callback, void* user_data, int nthreads) {
   return 0;
 }
 
-int parallel_for(parallel_for_cb* callback, void* user_data) {
-  return parallel_for_n(callback, user_data, ncpu);
+int bg3_parallel_for(bg3_parallel_for_cb* callback, void* user_data) {
+  return bg3_parallel_for_n(callback, user_data, ncpu);
 }
 
-static void sync_threads0(parallel_for_thread* tcb, int* count) {
+static void sync_threads0(bg3_parallel_for_thread* tcb, int* count) {
   pthread_mutex_lock(&tcb->sync->mutex);
   *count = (*count + 1) % tcb->thread_count;
   if (!*count) {
@@ -2110,30 +2130,30 @@ static void sync_threads0(parallel_for_thread* tcb, int* count) {
   }
 }
 
-void sync_threads(parallel_for_thread* tcb) {
+void bg3_sync_threads(bg3_parallel_for_thread* tcb) {
   sync_threads0(tcb, &tcb->sync->gate_enter);
   sync_threads0(tcb, &tcb->sync->gate_exit);
 }
 
-void buffer_hexdump(buffer* buf, size_t base, void* ptr, size_t length) {
+void bg3_buffer_hexdump(bg3_buffer* buf, size_t base, void* ptr, size_t length) {
   size_t line = 0;
   while (line < length) {
     int line_len = MIN(16, length - line);
-    buffer_printf(buf, "%08zX: ", base + line);
+    bg3_buffer_printf(buf, "%08zX: ", base + line);
     for (size_t i = line; i < line + line_len; ++i) {
-      buffer_printf(buf, "%02X ", ((uint8_t*)ptr)[i]);
+      bg3_buffer_printf(buf, "%02X ", ((uint8_t*)ptr)[i]);
     }
-    buffer_printf(buf, "    ");
+    bg3_buffer_printf(buf, "    ");
     for (size_t i = line; i < line + line_len; ++i) {
       char chr = ((char*)ptr)[i];
-      buffer_printf(buf, "%c", isprint(chr) ? chr : '.');
+      bg3_buffer_printf(buf, "%c", isprint(chr) ? chr : '.');
     }
-    buffer_putchar(buf, '\n');
+    bg3_buffer_putchar(buf, '\n');
     line += line_len;
   }
 }
 
-void hex_dump(void* ptr, size_t length) {
+void bg3_hex_dump(void* ptr, size_t length) {
   size_t line = 0;
   while (line < length) {
     int line_len = 16;
@@ -2154,7 +2174,7 @@ void hex_dump(void* ptr, size_t length) {
   }
 }
 
-bool strcasesuffix(char const* str, char const* suffix) {
+bool bg3_strcasesuffix(char const* str, char const* suffix) {
   size_t len = strlen(str);
   size_t suf_len = strlen(suffix);
   if (len < suf_len) {
@@ -2167,45 +2187,45 @@ bool strcasesuffix(char const* str, char const* suffix) {
 // world's shittiest hash table. open addressing with double hash probing.
 // tries to stay under 70% load. does not shrink itself atm.
 
-uint64_t hash_default_hash_fn(void* key, void* user_data) {
+uint64_t bg3_hash_default_hash_fn(void* key, void* user_data) {
   return XXH64(&key, sizeof(void*), 0);  // hash the pointer
 }
 
-bool hash_default_equal_fn(void* lhs, void* rhs, void* user_data) {
+bool bg3_hash_default_equal_fn(void* lhs, void* rhs, void* user_data) {
   return lhs == rhs;
 }
 
-void* hash_default_copy_fn(void* value, void* user_data) {
+void* bg3_hash_default_copy_fn(void* value, void* user_data) {
   return value;
 }
 
-void hash_default_free_fn(void* value, void* user_data) {
+void bg3_hash_default_free_fn(void* value, void* user_data) {
   // no-op
 }
 
-const hash_ops default_hash_ops = {
-    .hash_fn = hash_default_hash_fn,
-    .equal_fn = hash_default_equal_fn,
-    .copy_key_fn = hash_default_copy_fn,
-    .free_key_fn = hash_default_free_fn,
-    .copy_value_fn = hash_default_copy_fn,
-    .free_value_fn = hash_default_free_fn,
+const bg3_hash_ops default_hash_ops = {
+    .hash_fn = bg3_hash_default_hash_fn,
+    .equal_fn = bg3_hash_default_equal_fn,
+    .copy_key_fn = bg3_hash_default_copy_fn,
+    .free_key_fn = bg3_hash_default_free_fn,
+    .copy_value_fn = bg3_hash_default_copy_fn,
+    .free_value_fn = bg3_hash_default_free_fn,
 };
 
-void hash_init(hash* table, hash_ops const* ops, void* user_data) {
-  memset(table, 0, sizeof(hash));
+void bg3_hash_init(bg3_hash* table, bg3_hash_ops const* ops, void* user_data) {
+  memset(table, 0, sizeof(bg3_hash));
   table->ops = ops;
   table->user_data = user_data;
 }
 
-void hash_destroy(hash* table) {
-  hash_clear(table);
+void bg3_hash_destroy(bg3_hash* table) {
+  bg3_hash_clear(table);
   if (table->entries) {
     free(table->entries);
   }
 }
 
-bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
+bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** entry) {
   if (key == HASH_EMPTY_VALUE || key == HASH_TOMBSTONE_VALUE) {
     bg3_panic("attempt to set reserved hash key");
   }
@@ -2214,9 +2234,9 @@ bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
   uint64_t hash1 = hash0 | 1;
   if (!table->table_size) {
     table->table_size = 8;
-    table->entries = (hash_entry*)malloc(sizeof(hash_entry) * table->table_size);
+    table->entries = (bg3_hash_entry*)malloc(sizeof(bg3_hash_entry) * table->table_size);
     for (size_t i = 0; i < table->table_size; ++i) {
-      table->entries[i] = (hash_entry){.key = HASH_EMPTY_VALUE, .value = 0};
+      table->entries[i] = (bg3_hash_entry){.key = HASH_EMPTY_VALUE, .value = 0};
     }
   }
   bool rehashed;
@@ -2228,7 +2248,7 @@ bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
     bool needs_to_grow = false;
     rehashed = false;
     do {
-      hash_entry* e = table->entries + addr;
+      bg3_hash_entry* e = table->entries + addr;
       if (e->key == HASH_EMPTY_VALUE || e->key == HASH_TOMBSTONE_VALUE) {
         found_new = true;
         break;
@@ -2238,7 +2258,7 @@ bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
       }
       addr = (addr + hash1) & mask;
     } while (addr != start_addr);
-    hash_entry* probed = table->entries + addr;
+    bg3_hash_entry* probed = table->entries + addr;
     if (found_old) {
       *entry = probed;
       return false;
@@ -2260,13 +2280,14 @@ bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
       if (new_size < table->table_size) {
         bg3_panic("hash too big");
       }
-      hash_entry* new_entries = (hash_entry*)malloc(new_size * sizeof(hash_entry));
+      bg3_hash_entry* new_entries =
+          (bg3_hash_entry*)malloc(new_size * sizeof(bg3_hash_entry));
       for (size_t i = 0; i < new_size; ++i) {
-        new_entries[i] = (hash_entry){.key = HASH_EMPTY_VALUE, .value = 0};
+        new_entries[i] = (bg3_hash_entry){.key = HASH_EMPTY_VALUE, .value = 0};
       }
       mask = new_size - 1;
       for (size_t i = 0; i < table->table_size; ++i) {
-        hash_entry* old_e = table->entries + i;
+        bg3_hash_entry* old_e = table->entries + i;
         if (old_e->key == HASH_EMPTY_VALUE || old_e->key == HASH_TOMBSTONE_VALUE) {
           continue;
         }
@@ -2276,7 +2297,7 @@ bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
         start_addr = addr;
         bool found_slot = false;
         do {
-          hash_entry* e = new_entries + addr;
+          bg3_hash_entry* e = new_entries + addr;
           if (e->key == HASH_EMPTY_VALUE) {
             found_slot = true;
             break;
@@ -2295,15 +2316,15 @@ bool hash_try_set(hash* table, void* key, void* value, hash_entry** entry) {
   return true;
 }
 
-void hash_set(hash* table, void* key, void* value) {
-  hash_entry* entry;
-  if (!hash_try_set(table, key, value, &entry)) {
+void bg3_hash_set(bg3_hash* table, void* key, void* value) {
+  bg3_hash_entry* entry;
+  if (!bg3_hash_try_set(table, key, value, &entry)) {
     table->ops->free_value_fn(entry->value, table->user_data);
     entry->value = table->ops->copy_value_fn(value, table->user_data);
   }
 }
 
-hash_entry* hash_get_entry(hash* table, void* key) {
+bg3_hash_entry* bg3_hash_get_entry(bg3_hash* table, void* key) {
   if (key == HASH_EMPTY_VALUE || key == HASH_TOMBSTONE_VALUE) {
     bg3_panic("attempt to get reserved hash key");
   }
@@ -2315,7 +2336,7 @@ hash_entry* hash_get_entry(hash* table, void* key) {
   uint64_t mask = table->table_size - 1;
   uint64_t addr = hash0 & mask, start_addr = addr;
   do {
-    hash_entry* e = table->entries + addr;
+    bg3_hash_entry* e = table->entries + addr;
     if (e->key == HASH_EMPTY_VALUE) {
       return 0;
     } else if (e->key == HASH_TOMBSTONE_VALUE) {
@@ -2328,8 +2349,8 @@ hash_entry* hash_get_entry(hash* table, void* key) {
   return 0;
 }
 
-bool hash_delete(hash* table, void* key) {
-  hash_entry* entry = hash_get_entry(table, key);
+bool bg3_hash_delete(bg3_hash* table, void* key) {
+  bg3_hash_entry* entry = bg3_hash_get_entry(table, key);
   if (entry) {
     table->ops->free_key_fn(entry->key, table->user_data);
     table->ops->free_value_fn(entry->value, table->user_data);
@@ -2341,9 +2362,9 @@ bool hash_delete(hash* table, void* key) {
   return false;
 }
 
-void hash_clear(hash* table) {
+void bg3_hash_clear(bg3_hash* table) {
   for (size_t i = 0; i < table->table_size; ++i) {
-    hash_entry* e = table->entries + i;
+    bg3_hash_entry* e = table->entries + i;
     if (e->key != HASH_EMPTY_VALUE && e->key != HASH_TOMBSTONE_VALUE) {
       table->ops->free_key_fn(e->key, table->user_data);
       table->ops->free_value_fn(e->value, table->user_data);
@@ -2354,31 +2375,31 @@ void hash_clear(hash* table) {
   table->num_keys = 0;
 }
 
-void arena_init(arena* a, size_t chunk_size, size_t max_waste) {
-  memset(a, 0, sizeof(arena));
+void bg3_arena_init(bg3_arena* a, size_t chunk_size, size_t max_waste) {
+  memset(a, 0, sizeof(bg3_arena));
   a->chunk_size = chunk_size;
   a->max_waste = max_waste;
 }
 
-void arena_destroy(arena* a) {
-  for (arena_chunk* chunk = a->chunks; chunk;) {
-    arena_chunk* prev = chunk;
+void bg3_arena_destroy(bg3_arena* a) {
+  for (bg3_arena_chunk* chunk = a->chunks; chunk;) {
+    bg3_arena_chunk* prev = chunk;
     chunk = chunk->next;
     free(prev);
   }
-  for (arena_chunk* chunk = a->full_chunks; chunk;) {
-    arena_chunk* prev = chunk;
+  for (bg3_arena_chunk* chunk = a->full_chunks; chunk;) {
+    bg3_arena_chunk* prev = chunk;
     chunk = chunk->next;
     free(prev);
   }
 }
 
-void* arena_alloc(arena* a, size_t size) {
+void* bg3_arena_alloc(bg3_arena* a, size_t size) {
   if (size & 7) {
     size += 8 - (size & 7);
   }
 retry:
-  for (arena_chunk *chunk = a->chunks, *prev = 0; chunk;
+  for (bg3_arena_chunk *chunk = a->chunks, *prev = 0; chunk;
        prev = chunk, chunk = chunk->next) {
     size_t avail = chunk->end - chunk->bump;
     if (avail >= size) {
@@ -2398,7 +2419,8 @@ retry:
     }
   }
   size_t chunk_size = MAX(size, a->chunk_size);
-  arena_chunk* new_chunk = (arena_chunk*)malloc(sizeof(arena_chunk) + chunk_size);
+  bg3_arena_chunk* new_chunk =
+      (bg3_arena_chunk*)malloc(sizeof(bg3_arena_chunk) + chunk_size);
   new_chunk->bump = (char*)(new_chunk + 1);
   new_chunk->end = new_chunk->bump + chunk_size;
   new_chunk->next = a->chunks;
@@ -2406,27 +2428,27 @@ retry:
   goto retry;
 }
 
-char* arena_strdup(arena* a, char const* str) {
+char* bg3_arena_strdup(bg3_arena* a, char const* str) {
   size_t len = strlen(str) + 1;
-  char* result = (char*)arena_alloc(a, len);
+  char* result = (char*)bg3_arena_alloc(a, len);
   memcpy(result, str, len);
   return result;
 }
 
-char* arena_sprintf(arena* a, char const* format, ...) {
+char* bg3_arena_sprintf(bg3_arena* a, char const* format, ...) {
   va_list ap;
   va_start(ap, format);
   va_list ap_tmp;
   va_copy(ap_tmp, ap);
   size_t needed = 1 + vsnprintf(0, 0, format, ap_tmp);
   va_end(ap_tmp);
-  char* result = (char*)arena_alloc(a, needed);
+  char* result = (char*)bg3_arena_alloc(a, needed);
   vsnprintf(result, needed, format, ap);
   va_end(ap);
   return result;
 }
 
-static const char* lsof_dt_names[] = {
+static const char* bg3_lsof_dt_names[] = {
     "none",
     "uint8",
     "int16",
@@ -2463,11 +2485,11 @@ static const char* lsof_dt_names[] = {
     "translatedfsstring",
 };
 
-static inline char const* lsof_dt_name(int dt) {
-  if (dt < 0 || dt > lsof_dt_last) {
+static inline char const* bg3_lsof_dt_name(int dt) {
+  if (dt < 0 || dt > bg3_lsof_dt_last) {
     return "unknown";
   }
-  return lsof_dt_names[dt];
+  return bg3_lsof_dt_names[dt];
 }
 
 #define CHECKED_READ_OUT(file, dest, offset, size, out)         \
@@ -2477,29 +2499,29 @@ static inline char const* lsof_dt_name(int dt) {
     }                                                           \
   } while (0)
 
-int lspk_file_init(lspk_file* file, mapped_file* mapped) {
-  cursor c;
-  cursor_init(&c, mapped->data, mapped->data_len);
-  memset(file, 0, sizeof(lspk_file));
+int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
+  bg3_cursor c;
+  bg3_cursor_init(&c, mapped->data, mapped->data_len);
+  memset(file, 0, sizeof(bg3_lspk_file));
   file->mapped = mapped;
-  if (mapped->data_len < sizeof(lspk_header)) {
+  if (mapped->data_len < sizeof(bg3_lspk_header)) {
     return -1;
   }
-  cursor_read(&c, &file->header, sizeof(lspk_header));
+  bg3_cursor_read(&c, &file->header, sizeof(bg3_lspk_header));
   if (file->header.magic != LSPK_MAGIC) {
     return -1;
   }
   if (file->header.version != LSPK_VERSION) {
     return -1;
   }
-  lspk_manifest_header manifest_header;
-  cursor_init(&c, mapped->data + file->header.manifest_offset,
-              mapped->data_len - file->header.manifest_offset);
-  cursor_read(&c, &manifest_header, sizeof(lspk_manifest_header));
-  size_t uncompressed_size = manifest_header.num_files * sizeof(lspk_manifest_entry);
-  lspk_manifest_entry* entries = (lspk_manifest_entry*)malloc(uncompressed_size);
+  bg3_lspk_manifest_header manifest_header;
+  bg3_cursor_init(&c, mapped->data + file->header.manifest_offset,
+                  mapped->data_len - file->header.manifest_offset);
+  bg3_cursor_read(&c, &manifest_header, sizeof(bg3_lspk_manifest_header));
+  size_t uncompressed_size = manifest_header.num_files * sizeof(bg3_lspk_manifest_entry);
+  bg3_lspk_manifest_entry* entries = (bg3_lspk_manifest_entry*)malloc(uncompressed_size);
   if (LZ4_decompress_safe(
-          mapped->data + file->header.manifest_offset + sizeof(lspk_manifest_header),
+          mapped->data + file->header.manifest_offset + sizeof(bg3_lspk_manifest_header),
           (char*)entries, manifest_header.compressed_size, uncompressed_size) < 0) {
     fprintf(stderr, "failed to decompress manifest\n");
     free(entries);
@@ -2510,14 +2532,14 @@ int lspk_file_init(lspk_file* file, mapped_file* mapped) {
   return 0;
 }
 
-void lspk_file_destroy(lspk_file* file) {
+void bg3_lspk_file_destroy(bg3_lspk_file* file) {
   free(file->manifest);
 }
 
-bg3_status lspk_file_extract(lspk_file* file,
-                             lspk_manifest_entry* entry,
-                             char* dest,
-                             size_t* dest_len) {
+bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
+                                 bg3_lspk_manifest_entry* entry,
+                                 char* dest,
+                                 size_t* dest_len) {
   size_t avail_len = *dest_len;
   size_t entry_offset = ((size_t)entry->offset_hi << 32) | entry->offset_lo;
   // TODO: bounds checking
@@ -2579,29 +2601,29 @@ int do_pack(int argc, char const** argv) {
     fclose(listfp);
     return -1;
   }
-  buffer manifest_buf;
-  buffer_init(&manifest_buf);
-  lspk_header file_header;
-  lspk_manifest_header manifest_header;
+  bg3_buffer manifest_buf;
+  bg3_buffer_init(&manifest_buf);
+  bg3_lspk_header file_header;
+  bg3_lspk_manifest_header manifest_header;
   manifest_header.num_files = 0;
   manifest_header.compressed_size = 0;
-  memset(&file_header, 0, sizeof(lspk_header));
+  memset(&file_header, 0, sizeof(bg3_lspk_header));
   file_header.magic = LSPK_MAGIC;
   file_header.version = LSPK_VERSION;
   file_header.num_parts = 1;
   file_header.priority = 127;
-  fwrite(&file_header, sizeof(lspk_header), 1, pakfp);
+  fwrite(&file_header, sizeof(bg3_lspk_header), 1, pakfp);
   char line[1024];
-  uint64_t file_offset = sizeof(lspk_header);
+  uint64_t file_offset = sizeof(bg3_lspk_header);
   while (fgets(line, 1024, listfp)) {
     size_t line_len = strlen(line);
     if (line_len > 0) {
       line[line_len - 1] = '\0';
     }
-    lspk_manifest_entry entry;
+    bg3_lspk_manifest_entry entry;
     snprintf(entry.name, sizeof(entry.name), "%s", line);
-    mapped_file input_file;
-    if (mapped_file_init_ro(&input_file, entry.name) < 0) {
+    bg3_mapped_file input_file;
+    if (bg3_mapped_file_init_ro(&input_file, entry.name) < 0) {
       fprintf(stderr, "failed to open %s\n", entry.name);
       continue;
     }
@@ -2611,10 +2633,10 @@ int do_pack(int argc, char const** argv) {
     entry.compression = 0;
     entry.compressed_size = input_file.data_len;
     entry.uncompressed_size = 0;
-    buffer_push(&manifest_buf, &entry, sizeof(entry));
+    bg3_buffer_push(&manifest_buf, &entry, sizeof(entry));
     fwrite(input_file.data, input_file.data_len, 1, pakfp);
     manifest_header.num_files++;
-    mapped_file_destroy(&input_file);
+    bg3_mapped_file_destroy(&input_file);
     file_offset += input_file.data_len;
   }
   size_t compress_buf_size = LZ4_compressBound(manifest_buf.size);
@@ -2625,7 +2647,7 @@ int do_pack(int argc, char const** argv) {
   file_header.manifest_size = manifest_header.compressed_size + sizeof(manifest_header);
   fwrite(&manifest_header, sizeof(manifest_header), 1, pakfp);
   fwrite(compress_buf, manifest_header.compressed_size, 1, pakfp);
-  buffer_destroy(&manifest_buf);
+  bg3_buffer_destroy(&manifest_buf);
   fseek(pakfp, 0, SEEK_SET);
   fwrite(&file_header, sizeof(file_header), 1, pakfp);
   fclose(pakfp);
@@ -2633,46 +2655,48 @@ int do_pack(int argc, char const** argv) {
   return bg3_success;
 }
 
-void lsof_symtab_init(lsof_symtab* table, int num_buckets) {
-  memset(table, 0, sizeof(lsof_symtab));
+void bg3_lsof_symtab_init(bg3_lsof_symtab* table, int num_buckets) {
+  memset(table, 0, sizeof(bg3_lsof_symtab));
   table->num_buckets = num_buckets;
   table->is_writable = true;
-  table->buckets = (lsof_symtab_bucket*)calloc(num_buckets, sizeof(lsof_symtab_bucket));
+  table->buckets =
+      (bg3_lsof_symtab_bucket*)calloc(num_buckets, sizeof(bg3_lsof_symtab_bucket));
 }
 
-void lsof_symtab_init_data(lsof_symtab* table, char* ptr, size_t length) {
+void bg3_lsof_symtab_init_data(bg3_lsof_symtab* table, char* ptr, size_t length) {
   uint16_t num_buckets;
-  cursor c;
-  cursor_init(&c, ptr, length);
-  cursor_read(&c, &num_buckets, sizeof(uint16_t));
+  bg3_cursor c;
+  bg3_cursor_init(&c, ptr, length);
+  bg3_cursor_read(&c, &num_buckets, sizeof(uint16_t));
   table->num_buckets = num_buckets;
   table->is_writable = false;
-  table->buckets = (lsof_symtab_bucket*)calloc(num_buckets, sizeof(lsof_symtab_bucket));
+  table->buckets =
+      (bg3_lsof_symtab_bucket*)calloc(num_buckets, sizeof(bg3_lsof_symtab_bucket));
   // lslib says this is the upper bits of a 32bit bucket count
   // but that makes no sense because there's no way to address
   // a bucket past 16bits in the other tables.
-  cursor_read(&c, 0, sizeof(uint16_t));
+  bg3_cursor_read(&c, 0, sizeof(uint16_t));
   for (int bucket = 0; bucket < num_buckets; ++bucket) {
     uint16_t num_entries;
-    cursor_read(&c, &num_entries, sizeof(uint16_t));
+    bg3_cursor_read(&c, &num_entries, sizeof(uint16_t));
     table->buckets[bucket].num_entries = num_entries;
     table->buckets[bucket].entries =
-        (lsof_symtab_entry*)calloc(num_entries, sizeof(lsof_symtab_entry));
+        (bg3_lsof_symtab_entry*)calloc(num_entries, sizeof(bg3_lsof_symtab_entry));
     for (int entry = 0; entry < num_entries; ++entry) {
       uint16_t length;
-      cursor_read(&c, &length, sizeof(uint16_t));
+      bg3_cursor_read(&c, &length, sizeof(uint16_t));
       table->buckets[bucket].entries[entry].length = length;
       table->buckets[bucket].entries[entry].data = c.ptr;
-      cursor_read(&c, 0, length);
+      bg3_cursor_read(&c, 0, length);
     }
   }
 }
 
-void lsof_symtab_destroy(lsof_symtab* table) {
+void bg3_lsof_symtab_destroy(bg3_lsof_symtab* table) {
   for (int i = 0; i < table->num_buckets; ++i) {
-    lsof_symtab_bucket* bucket = &table->buckets[i];
+    bg3_lsof_symtab_bucket* bucket = &table->buckets[i];
     for (int j = 0; j < bucket->num_entries; ++j) {
-      lsof_symtab_entry* entry = &bucket->entries[j];
+      bg3_lsof_symtab_entry* entry = &bucket->entries[j];
       if (table->is_writable) {
         free(entry->data);
       }
@@ -2685,18 +2709,19 @@ void lsof_symtab_destroy(lsof_symtab* table) {
   free(table->buckets);
 }
 
-lsof_symtab_entry* lsof_symtab_get_ref(lsof_symtab* table, lsof_sym_ref ref) {
+bg3_lsof_symtab_entry* bg3_lsof_symtab_get_ref(bg3_lsof_symtab* table,
+                                               bg3_lsof_sym_ref ref) {
   if (ref.bucket >= table->num_buckets) {
     bg3_panic("invalid bucket (%04X, %04X)\n", (int)ref.bucket, (int)ref.entry);
   }
-  lsof_symtab_bucket* bucket = &table->buckets[ref.bucket];
+  bg3_lsof_symtab_bucket* bucket = &table->buckets[ref.bucket];
   if (ref.entry >= bucket->num_entries) {
     bg3_panic("invalid entry (%04X, %04X)\n", (int)ref.bucket, (int)ref.entry);
   }
   return &bucket->entries[ref.entry];
 }
 
-char const* lsof_symtab_entry_c_str(lsof_symtab_entry* entry) {
+char const* bg3_lsof_symtab_entry_c_str(bg3_lsof_symtab_entry* entry) {
   if (!entry) {
     return "NULL";
   }
@@ -2706,69 +2731,71 @@ char const* lsof_symtab_entry_c_str(lsof_symtab_entry* entry) {
   return entry->c_str;
 }
 
-void lsof_symtab_dump(lsof_symtab* table) {
+void bg3_lsof_symtab_dump(bg3_lsof_symtab* table) {
   for (int bucket = 0; bucket < table->num_buckets; ++bucket) {
     for (int entry = 0; entry < table->buckets[bucket].num_entries; ++entry) {
       printf("entry (%04X,%04X): %s\n", bucket, entry,
-             lsof_symtab_entry_c_str(&table->buckets[bucket].entries[entry]));
+             bg3_lsof_symtab_entry_c_str(&table->buckets[bucket].entries[entry]));
     }
   }
 }
 
-lsof_sym_ref lsof_symtab_intern(lsof_symtab* table, char const* name) {
+bg3_lsof_sym_ref bg3_lsof_symtab_intern(bg3_lsof_symtab* table, char const* name) {
   size_t len = strlen(name);
   XXH32_hash_t hash = XXH32(name, len, 0);
-  lsof_symtab_bucket* bucket = &table->buckets[hash % table->num_buckets];
+  bg3_lsof_symtab_bucket* bucket = &table->buckets[hash % table->num_buckets];
   for (size_t i = 0; i < bucket->num_entries; ++i) {
     if (len == bucket->entries[i].length &&
         !strncmp(bucket->entries[i].data, name, len)) {
-      lsof_sym_ref ref = {(uint16_t)i, (uint16_t)(hash % table->num_buckets)};
+      bg3_lsof_sym_ref ref = {(uint16_t)i, (uint16_t)(hash % table->num_buckets)};
       return ref;
     }
   }
   if (bucket->num_entries == bucket->capacity) {
     size_t new_capacity = bucket->capacity + (bucket->capacity / 2) + 1;
-    bucket->entries = (lsof_symtab_entry*)realloc(
+    bucket->entries = (bg3_lsof_symtab_entry*)realloc(
         bucket->entries,
-        new_capacity * sizeof(lsof_symtab_entry));  // TODO: CHECKED MATH OMG
+        new_capacity * sizeof(bg3_lsof_symtab_entry));  // TODO: CHECKED MATH OMG
     bucket->capacity = new_capacity;
   }
-  lsof_symtab_entry* new_entry = &bucket->entries[bucket->num_entries];
+  bg3_lsof_symtab_entry* new_entry = &bucket->entries[bucket->num_entries];
   new_entry->data = strdup(name);
   new_entry->length = len;
-  lsof_sym_ref ref = {(uint16_t)bucket->num_entries,
-                      (uint16_t)(hash % table->num_buckets)};
+  bg3_lsof_sym_ref ref = {(uint16_t)bucket->num_entries,
+                          (uint16_t)(hash % table->num_buckets)};
   bucket->num_entries++;
   return ref;
 }
 
-void lsof_symtab_write(lsof_symtab* table, buffer* buf) {
+void bg3_lsof_symtab_write(bg3_lsof_symtab* table, bg3_buffer* buf) {
   uint32_t num_buckets = table->num_buckets;
-  buffer_push(buf, &num_buckets, sizeof(uint32_t));
+  bg3_buffer_push(buf, &num_buckets, sizeof(uint32_t));
   for (uint32_t i = 0; i < num_buckets; ++i) {
-    lsof_symtab_bucket* bucket = &table->buckets[i];
+    bg3_lsof_symtab_bucket* bucket = &table->buckets[i];
     uint16_t num_entries = bucket->num_entries;
-    buffer_push(buf, &num_entries, sizeof(uint16_t));
+    bg3_buffer_push(buf, &num_entries, sizeof(uint16_t));
     for (uint16_t j = 0; j < num_entries; ++j) {
       uint16_t length = bucket->entries[j].length;
-      buffer_push(buf, &length, sizeof(uint16_t));
-      buffer_push(buf, bucket->entries[j].data, length);
+      bg3_buffer_push(buf, &length, sizeof(uint16_t));
+      bg3_buffer_push(buf, bucket->entries[j].data, length);
     }
   }
 }
 
-int lsof_reader_get_node(lsof_reader* file, lsof_node_wide* node, size_t node_index) {
+int bg3_lsof_reader_get_node(bg3_lsof_reader* file,
+                             bg3_lsof_node_wide* node,
+                             size_t node_index) {
   char* ptr = file->node_table_raw;
   if (node_index >= file->num_nodes) {
     return -1;
   }
   bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
-  ptr += node_index * (is_wide ? sizeof(lsof_node_wide) : sizeof(lsof_node_slim));
+  ptr += node_index * (is_wide ? sizeof(bg3_lsof_node_wide) : sizeof(bg3_lsof_node_slim));
   if (is_wide) {
-    memcpy(node, ptr, sizeof(lsof_node_wide));
+    memcpy(node, ptr, sizeof(bg3_lsof_node_wide));
   } else {
-    lsof_node_slim light;
-    memcpy(&light, ptr, sizeof(lsof_node_slim));
+    bg3_lsof_node_slim light;
+    memcpy(&light, ptr, sizeof(bg3_lsof_node_slim));
     node->name = light.name;
     node->parent = light.parent;
     node->next = -1;
@@ -2777,18 +2804,20 @@ int lsof_reader_get_node(lsof_reader* file, lsof_node_wide* node, size_t node_in
   return 0;
 }
 
-int lsof_reader_get_attr(lsof_reader* file, lsof_attr_wide* attr, size_t attr_index) {
+int bg3_lsof_reader_get_attr(bg3_lsof_reader* file,
+                             bg3_lsof_attr_wide* attr,
+                             size_t attr_index) {
   char* ptr = file->attr_table_raw;
   if (attr_index >= file->num_attrs) {
     return -1;
   }
   bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
-  ptr += attr_index * (is_wide ? sizeof(lsof_attr_wide) : sizeof(lsof_attr_slim));
+  ptr += attr_index * (is_wide ? sizeof(bg3_lsof_attr_wide) : sizeof(bg3_lsof_attr_slim));
   if (is_wide) {
-    memcpy(attr, ptr, sizeof(lsof_attr_wide));
+    memcpy(attr, ptr, sizeof(bg3_lsof_attr_wide));
   } else {
-    lsof_attr_slim light;
-    memcpy(&light, ptr, sizeof(lsof_attr_slim));
+    bg3_lsof_attr_slim light;
+    memcpy(&light, ptr, sizeof(bg3_lsof_attr_slim));
     attr->name = light.name;
     attr->type = light.type;
     attr->length = light.length;
@@ -2799,9 +2828,9 @@ int lsof_reader_get_attr(lsof_reader* file, lsof_attr_wide* attr, size_t attr_in
 }
 
 // lsof_size/next_addr is trusted here so must already be validated
-static bool lsof_reader_extract_section(lsof_reader* file,
+static bool lsof_reader_extract_section(bg3_lsof_reader* file,
                                         char** out_section,
-                                        lsof_size* size,
+                                        bg3_lsof_size* size,
                                         size_t* next_addr,
                                         bool use_lz4f) {
   LZ4F_dctx* dctx;
@@ -2852,19 +2881,19 @@ fail:
   return false;
 }
 
-int lsof_reader_init(lsof_reader* file, char* data, size_t data_len) {
+int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
   bool created_symtab = false;
   size_t node_size, attr_size;
-  memset(file, 0, sizeof(lsof_reader));
+  memset(file, 0, sizeof(bg3_lsof_reader));
   file->data = data;
   file->data_len = data_len;
-  cursor c;
-  cursor_init(&c, file->data, file->data_len);
-  if (file->data_len < sizeof(lsof_header)) {
+  bg3_cursor c;
+  bg3_cursor_init(&c, file->data, file->data_len);
+  if (file->data_len < sizeof(bg3_lsof_header)) {
     fprintf(stderr, "file too small\n");
     goto fail;
   }
-  cursor_read(&c, &file->header, sizeof(lsof_header));
+  bg3_cursor_read(&c, &file->header, sizeof(bg3_lsof_header));
   if (file->header.magic != LSOF_MAGIC) {
     fprintf(stderr, "invalid file magic\n");
     goto fail;
@@ -2878,32 +2907,32 @@ int lsof_reader_init(lsof_reader* file, char* data, size_t data_len) {
     case LSPK_ENTRY_COMPRESSION_NONE:
       file->owns_sections = false;
       file->string_table_raw = file->data + sizeof(file->header);
-      cursor_read(&c, 0, file->header.string_table.uncompressed_size);
+      bg3_cursor_read(&c, 0, file->header.string_table.uncompressed_size);
       file->node_table_raw =
           file->string_table_raw + file->header.string_table.uncompressed_size;
-      cursor_read(&c, 0, file->header.node_table.uncompressed_size);
+      bg3_cursor_read(&c, 0, file->header.node_table.uncompressed_size);
       file->attr_table_raw =
           file->node_table_raw + file->header.node_table.uncompressed_size;
-      cursor_read(&c, 0, file->header.attr_table.uncompressed_size);
+      bg3_cursor_read(&c, 0, file->header.attr_table.uncompressed_size);
       file->value_table_raw =
           file->attr_table_raw + file->header.attr_table.uncompressed_size;
-      cursor_read(&c, 0, file->header.value_table.uncompressed_size);
+      bg3_cursor_read(&c, 0, file->header.value_table.uncompressed_size);
       break;
     case LSPK_ENTRY_COMPRESSION_LZ4: {
       file->owns_sections = true;
       size_t next_addr = sizeof(file->header);
       bool ok = true;
-      cursor_read(&c, 0, file->header.string_table.compressed_size);
+      bg3_cursor_read(&c, 0, file->header.string_table.compressed_size);
       ok = ok &&
            lsof_reader_extract_section(file, &file->string_table_raw,
                                        &file->header.string_table, &next_addr, false);
-      cursor_read(&c, 0, file->header.node_table.compressed_size);
+      bg3_cursor_read(&c, 0, file->header.node_table.compressed_size);
       ok = ok && lsof_reader_extract_section(file, &file->node_table_raw,
                                              &file->header.node_table, &next_addr, true);
-      cursor_read(&c, 0, file->header.attr_table.compressed_size);
+      bg3_cursor_read(&c, 0, file->header.attr_table.compressed_size);
       ok = ok && lsof_reader_extract_section(file, &file->attr_table_raw,
                                              &file->header.attr_table, &next_addr, true);
-      cursor_read(&c, 0, file->header.value_table.compressed_size);
+      bg3_cursor_read(&c, 0, file->header.value_table.compressed_size);
       ok = ok && lsof_reader_extract_section(file, &file->value_table_raw,
                                              &file->header.value_table, &next_addr, true);
       if (!ok) {
@@ -2916,15 +2945,15 @@ int lsof_reader_init(lsof_reader* file, char* data, size_t data_len) {
               LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression));
       goto fail;
   }
-  lsof_symtab_init_data(&file->symtab, file->string_table_raw,
-                        file->header.string_table.uncompressed_size);
+  bg3_lsof_symtab_init_data(&file->symtab, file->string_table_raw,
+                            file->header.string_table.uncompressed_size);
   created_symtab = true;
   node_size = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS)
-                  ? sizeof(lsof_node_wide)
-                  : sizeof(lsof_node_slim);
+                  ? sizeof(bg3_lsof_node_wide)
+                  : sizeof(bg3_lsof_node_slim);
   attr_size = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS)
-                  ? sizeof(lsof_attr_wide)
-                  : sizeof(lsof_attr_slim);
+                  ? sizeof(bg3_lsof_attr_wide)
+                  : sizeof(bg3_lsof_attr_slim);
   file->num_nodes = file->header.node_table.uncompressed_size / node_size;
   file->num_attrs = file->header.attr_table.uncompressed_size / attr_size;
   return 0;
@@ -2936,13 +2965,13 @@ fail:
     free(file->value_table_raw);
   }
   if (created_symtab) {
-    lsof_symtab_destroy(&file->symtab);
+    bg3_lsof_symtab_destroy(&file->symtab);
   }
   return -1;
 }
 
-void lsof_reader_destroy(lsof_reader* file) {
-  lsof_symtab_destroy(&file->symtab);
+void bg3_lsof_reader_destroy(bg3_lsof_reader* file) {
+  bg3_lsof_symtab_destroy(&file->symtab);
   free(file->value_offsets);
 }
 
@@ -2954,24 +2983,24 @@ typedef struct lsof_print_stack {
   bool is_fresh_line;
 } lsof_print_stack;
 
-static void fresh_line(buffer* out, lsof_print_stack* stack) {
+static void fresh_line(bg3_buffer* out, lsof_print_stack* stack) {
   if (!stack->is_fresh_line) {
-    buffer_putchar(out, '\n');
+    bg3_buffer_putchar(out, '\n');
     for (int i = 0; i < stack->indent; ++i) {
-      buffer_putchar(out, ' ');
+      bg3_buffer_putchar(out, ' ');
     }
   }
   stack->is_fresh_line = true;
 }
 
-void lsof_reader_ensure_value_offsets(lsof_reader* file) {
+void bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file) {
   bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
   if (!is_wide && !file->value_offsets) {
     size_t value_offset = 0;
     file->value_offsets = (uint32_t*)calloc(file->num_attrs, sizeof(uint32_t));
-    for (lsof_attr_ref i = 0; i < file->num_attrs; ++i) {
-      lsof_attr_wide attr;
-      if (lsof_reader_get_attr(file, &attr, i) < 0) {
+    for (bg3_lsof_attr_ref i = 0; i < file->num_attrs; ++i) {
+      bg3_lsof_attr_wide attr;
+      if (bg3_lsof_reader_get_attr(file, &attr, i) < 0) {
         bg3_panic("unreachable");
       }
       file->value_offsets[i] = value_offset;
@@ -2981,17 +3010,17 @@ void lsof_reader_ensure_value_offsets(lsof_reader* file) {
 }
 
 // TODO clean up this disaster
-int lsof_reader_print_sexp(lsof_reader* file, buffer* out) {
+int bg3_lsof_reader_print_sexp(bg3_lsof_reader* file, bg3_buffer* out) {
   lsof_print_stack stack;
   stack.ptr = &stack.frames[MAX_FRAMES - 1];
   *stack.ptr = -1;
   stack.indent = 0;
   stack.is_fresh_line = true;
-  lsof_reader_ensure_value_offsets(file);
+  bg3_lsof_reader_ensure_value_offsets(file);
   bool is_wide = IS_SET(file->header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
-  for (lsof_node_ref i = 0; i < file->num_nodes; ++i) {
-    lsof_node_wide node;
-    if (lsof_reader_get_node(file, &node, i) < 0) {
+  for (bg3_lsof_node_ref i = 0; i < file->num_nodes; ++i) {
+    bg3_lsof_node_wide node;
+    if (bg3_lsof_reader_get_node(file, &node, i) < 0) {
       return -1;
     }
     while (node.parent != *stack.ptr) {
@@ -3000,7 +3029,7 @@ int lsof_reader_print_sexp(lsof_reader* file, buffer* out) {
         return -1;
       }
       stack.ptr++;
-      buffer_putchar(out, ')');
+      bg3_buffer_putchar(out, ')');
       stack.is_fresh_line = false;
       stack.indent -= 2;
     }
@@ -3012,19 +3041,19 @@ int lsof_reader_print_sexp(lsof_reader* file, buffer* out) {
     fresh_line(out, &stack);
     stack.indent += 2;
     char const* node_name =
-        lsof_symtab_entry_c_str(lsof_symtab_get_ref(&file->symtab, node.name));
+        bg3_lsof_symtab_entry_c_str(bg3_lsof_symtab_get_ref(&file->symtab, node.name));
     if (!*node_name) {
       node_name = "_";
     }
     size_t name_len = strlen(node_name);
-    buffer_printf(out, "(%s (", node_name);
+    bg3_buffer_printf(out, "(%s (", node_name);
     stack.is_fresh_line = false;
-    lsof_attr_ref attr_index = node.attrs;
+    bg3_lsof_attr_ref attr_index = node.attrs;
     bool first_attr = true;
     stack.indent += name_len + 1;
     while (attr_index != -1 && attr_index < file->num_attrs) {
-      lsof_attr_wide attr;
-      if (lsof_reader_get_attr(file, &attr, attr_index) < 0) {
+      bg3_lsof_attr_wide attr;
+      if (bg3_lsof_reader_get_attr(file, &attr, attr_index) < 0) {
         return -1;
       }
       if (!is_wide && attr.owner != i) {
@@ -3036,38 +3065,38 @@ int lsof_reader_print_sexp(lsof_reader* file, buffer* out) {
       first_attr = false;
       size_t offset = is_wide ? attr.value : file->value_offsets[attr_index];
       char* raw_attr = file->value_table_raw + offset;
-      buffer_printf(
+      bg3_buffer_printf(
           out, "(%s ",
-          lsof_symtab_entry_c_str(lsof_symtab_get_ref(&file->symtab, attr.name)));
+          bg3_lsof_symtab_entry_c_str(bg3_lsof_symtab_get_ref(&file->symtab, attr.name)));
       switch (attr.type) {
-        case lsof_dt_lsstring: {
+        case bg3_lsof_dt_lsstring: {
           char* str = strndup(raw_attr, attr.length);
-          buffer_printf(out, "(LS \"%s\")", str);
+          bg3_buffer_printf(out, "(LS \"%s\")", str);
           free(str);
           break;
         }
-        case lsof_dt_fixedstring: {
+        case bg3_lsof_dt_fixedstring: {
           char* str = strndup(raw_attr, attr.length);
-          buffer_printf(out, "\"%s\"", str);
+          bg3_buffer_printf(out, "\"%s\"", str);
           free(str);
           break;
         }
-        case lsof_dt_bool: {
-          buffer_printf(out, "%s", *raw_attr ? "#t" : "#f");
+        case bg3_lsof_dt_bool: {
+          bg3_buffer_printf(out, "%s", *raw_attr ? "#t" : "#f");
           break;
         }
-        case lsof_dt_uuid: {
-          uuid id;
-          if (attr.length != sizeof(uuid)) {
+        case bg3_lsof_dt_uuid: {
+          bg3_uuid id;
+          if (attr.length != sizeof(bg3_uuid)) {
             bg3_panic("invalid uuid length");
           }
           memcpy(&id, raw_attr, sizeof(id));
-          buffer_printf(out, "(uuid \"%08x-%04x-%04x-%04x-%04x%04x%04x\")", id.word,
-                        id.half[0], id.half[1], id.half[2], id.half[3], id.half[4],
-                        id.half[5]);
+          bg3_buffer_printf(out, "(uuid \"%08x-%04x-%04x-%04x-%04x%04x%04x\")", id.word,
+                            id.half[0], id.half[1], id.half[2], id.half[3], id.half[4],
+                            id.half[5]);
           break;
         }
-        case lsof_dt_translatedstring: {
+        case bg3_lsof_dt_translatedstring: {
           uint16_t version;
           uint32_t string_len;
           memcpy(&version, raw_attr, sizeof(uint16_t));
@@ -3076,155 +3105,158 @@ int lsof_reader_print_sexp(lsof_reader* file, buffer* out) {
             bg3_panic("invalid translated string length");
           }
           char* str = strndup(raw_attr + 6, string_len);
-          buffer_printf(out, "(TS \"%s\" %d)", str, version);
+          bg3_buffer_printf(out, "(TS \"%s\" %d)", str, version);
           free(str);
           break;
         }
-        case lsof_dt_ivec2: {
+        case bg3_lsof_dt_ivec2: {
           struct {
             int32_t x, y;
           } vec;
           memcpy(&vec, raw_attr, sizeof(vec));
-          buffer_printf(out, "(ivec2 %" PRIi32 " %" PRIi32 ")", vec.x, vec.y);
+          bg3_buffer_printf(out, "(ivec2 %" PRIi32 " %" PRIi32 ")", vec.x, vec.y);
           break;
         }
-        case lsof_dt_ivec3: {
+        case bg3_lsof_dt_ivec3: {
           struct {
             int32_t x, y, z;
           } vec;
           memcpy(&vec, raw_attr, sizeof(vec));
-          buffer_printf(out, "(ivec3 %" PRIi32 " %" PRIi32 " %" PRIi32 ")", vec.x, vec.y,
-                        vec.z);
+          bg3_buffer_printf(out, "(ivec3 %" PRIi32 " %" PRIi32 " %" PRIi32 ")", vec.x,
+                            vec.y, vec.z);
           break;
         }
-        case lsof_dt_ivec4: {
+        case bg3_lsof_dt_ivec4: {
           struct {
             int32_t x, y, z, w;
           } vec;
           memcpy(&vec, raw_attr, sizeof(vec));
-          buffer_printf(out, "(ivec4 %" PRIi32 " %" PRIi32 " %" PRIi32 " %" PRIi32 ")",
-                        vec.x, vec.y, vec.z, vec.w);
+          bg3_buffer_printf(out,
+                            "(ivec4 %" PRIi32 " %" PRIi32 " %" PRIi32 " %" PRIi32 ")",
+                            vec.x, vec.y, vec.z, vec.w);
           break;
         }
-        case lsof_dt_vec2: {
+        case bg3_lsof_dt_vec2: {
           struct {
             float x, y;
           } vec;
           memcpy(&vec, raw_attr, sizeof(vec));
-          buffer_printf(out, "(vec2 %f %f)", vec.x, vec.y);
+          bg3_buffer_printf(out, "(vec2 %f %f)", vec.x, vec.y);
           break;
         }
-        case lsof_dt_vec3: {
+        case bg3_lsof_dt_vec3: {
           struct {
             float x, y, z;
           } vec;
           memcpy(&vec, raw_attr, sizeof(vec));
-          buffer_printf(out, "(vec3 %f %f %f)", vec.x, vec.y, vec.z);
+          bg3_buffer_printf(out, "(vec3 %f %f %f)", vec.x, vec.y, vec.z);
           break;
         }
-        case lsof_dt_vec4: {
+        case bg3_lsof_dt_vec4: {
           struct {
             float x, y, z, w;
           } vec;
           memcpy(&vec, raw_attr, sizeof(vec));
-          buffer_printf(out, "(vec4 %f %f %f %f)", vec.x, vec.y, vec.z, vec.w);
+          bg3_buffer_printf(out, "(vec4 %f %f %f %f)", vec.x, vec.y, vec.z, vec.w);
           break;
         }
-        case lsof_dt_mat4: {
+        case bg3_lsof_dt_mat4: {
           float mat4[16];
           memcpy(&mat4, raw_attr, sizeof(mat4));
-          buffer_printf(out, "(mat4 %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f)",
-                        mat4[0], mat4[1], mat4[2], mat4[3], mat4[4], mat4[5], mat4[6],
-                        mat4[7], mat4[8], mat4[9], mat4[10], mat4[11], mat4[12], mat4[13],
-                        mat4[14], mat4[15]);
+          bg3_buffer_printf(out, "(mat4 %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f)",
+                            mat4[0], mat4[1], mat4[2], mat4[3], mat4[4], mat4[5], mat4[6],
+                            mat4[7], mat4[8], mat4[9], mat4[10], mat4[11], mat4[12],
+                            mat4[13], mat4[14], mat4[15]);
           break;
         }
-        case lsof_dt_mat4x3: {
+        case bg3_lsof_dt_mat4x3: {
           float mat4x3[12];
           memcpy(&mat4x3, raw_attr, sizeof(float) * 12);
-          buffer_printf(out, "(mat4x3 %f %f %f %f %f %f %f %f %f %f %f %f)", mat4x3[0],
-                        mat4x3[1], mat4x3[2], mat4x3[3], mat4x3[4], mat4x3[5], mat4x3[6],
-                        mat4x3[7], mat4x3[8], mat4x3[9], mat4x3[10], mat4x3[11]);
+          bg3_buffer_printf(out, "(mat4x3 %f %f %f %f %f %f %f %f %f %f %f %f)",
+                            mat4x3[0], mat4x3[1], mat4x3[2], mat4x3[3], mat4x3[4],
+                            mat4x3[5], mat4x3[6], mat4x3[7], mat4x3[8], mat4x3[9],
+                            mat4x3[10], mat4x3[11]);
           break;
         }
 #define V(dt, itype, format)               \
   case dt: {                               \
     itype val;                             \
     memcpy(&val, raw_attr, sizeof(itype)); \
-    buffer_printf(out, format, val);       \
+    bg3_buffer_printf(out, format, val);   \
     break;                                 \
   }
-          V(lsof_dt_uint8, uint8_t, "(u8 %u)");
-          V(lsof_dt_int8, int8_t, "(i8 %d)");
-          V(lsof_dt_uint16, uint16_t, "(u16 %u)");
-          V(lsof_dt_int16, int16_t, "(i16 %d)");
-          V(lsof_dt_uint32, uint32_t, "(u32 %u)");
-          V(lsof_dt_int32, int32_t, "(i32 %d)");
-          V(lsof_dt_uint64, int64_t, "(u64 %" PRIu64 ")");
-          V(lsof_dt_int64, int64_t, "(i64 %" PRIi64 ")");
-          V(lsof_dt_float, float, "(f32 %f)");
-          V(lsof_dt_double, double, "(f64 %f)");
+          V(bg3_lsof_dt_uint8, uint8_t, "(u8 %u)");
+          V(bg3_lsof_dt_int8, int8_t, "(i8 %d)");
+          V(bg3_lsof_dt_uint16, uint16_t, "(u16 %u)");
+          V(bg3_lsof_dt_int16, int16_t, "(i16 %d)");
+          V(bg3_lsof_dt_uint32, uint32_t, "(u32 %u)");
+          V(bg3_lsof_dt_int32, int32_t, "(i32 %d)");
+          V(bg3_lsof_dt_uint64, int64_t, "(u64 %" PRIu64 ")");
+          V(bg3_lsof_dt_int64, int64_t, "(i64 %" PRIi64 ")");
+          V(bg3_lsof_dt_float, float, "(f32 %f)");
+          V(bg3_lsof_dt_double, double, "(f64 %f)");
 #undef V
         default: {
-          buffer_printf(out, "(raw %d ", attr.type);
+          bg3_buffer_printf(out, "(raw %d ", attr.type);
           for (size_t i = 0; i < attr.length; ++i) {
-            buffer_printf(out, i == attr.length - 1 ? "%d" : "%d ", (uint8_t)raw_attr[i]);
+            bg3_buffer_printf(out, i == attr.length - 1 ? "%d" : "%d ",
+                              (uint8_t)raw_attr[i]);
           }
-          buffer_printf(out, ")");
+          bg3_buffer_printf(out, ")");
           break;
         }
       }
-      buffer_putchar(out, ')');
+      bg3_buffer_putchar(out, ')');
       stack.is_fresh_line = false;
       attr_index = is_wide ? attr.next : attr_index + 1;
     }
-    buffer_putchar(out, ')');
+    bg3_buffer_putchar(out, ')');
     stack.is_fresh_line = false;
     stack.indent -= name_len + 1;
   }
   while (*stack.ptr != -1) {
-    buffer_putchar(out, ')');
+    bg3_buffer_putchar(out, ')');
     stack.ptr++;
     stack.is_fresh_line = false;
   }
-  buffer_putchar(out, '\n');
+  bg3_buffer_putchar(out, '\n');
   return 0;
 }
 
-void lsof_writer_init(lsof_writer* writer) {
-  memset(writer, 0, sizeof(lsof_writer));
-  lsof_symtab_init(&writer->symtab, 512);
+void bg3_lsof_writer_init(bg3_lsof_writer* writer) {
+  memset(writer, 0, sizeof(bg3_lsof_writer));
+  bg3_lsof_symtab_init(&writer->symtab, 512);
 }
 
-void lsof_writer_destroy(lsof_writer* writer) {
-  lsof_symtab_destroy(&writer->symtab);
+void bg3_lsof_writer_destroy(bg3_lsof_writer* writer) {
+  bg3_lsof_symtab_destroy(&writer->symtab);
 }
 
-bg3_status lsof_writer_write_file(lsof_writer* writer, char const* path) {
-  lsof_header header;
-  memset(&header, 0, sizeof(lsof_header));
+bg3_status bg3_lsof_writer_write_file(bg3_lsof_writer* writer, char const* path) {
+  bg3_lsof_header header;
+  memset(&header, 0, sizeof(bg3_lsof_header));
   header.magic = LSOF_MAGIC;
   header.version = LSOF_VERSION_MAX;
   header.engine_version = 0;
   header.compression = 0;
   header.flags = LSOF_FLAG_HAS_SIBLING_POINTERS;
-  buffer string_buf = {};
-  lsof_symtab_write(&writer->symtab, &string_buf);
+  bg3_buffer string_buf = {};
+  bg3_lsof_symtab_write(&writer->symtab, &string_buf);
   header.string_table.uncompressed_size = string_buf.size;
   header.node_table.uncompressed_size = writer->node_table.size;
   header.attr_table.uncompressed_size = writer->attr_table.size;
   header.value_table.uncompressed_size = writer->value_table.size;
   size_t total_size = string_buf.size + writer->node_table.size +
                       writer->attr_table.size + writer->value_table.size +
-                      sizeof(lsof_header);
-  mapped_file mapped;
-  if (mapped_file_init_rw_trunc(&mapped, path, total_size) < 0) {
-    buffer_destroy(&string_buf);
+                      sizeof(bg3_lsof_header);
+  bg3_mapped_file mapped;
+  if (bg3_mapped_file_init_rw_trunc(&mapped, path, total_size) < 0) {
+    bg3_buffer_destroy(&string_buf);
     return bg3_error_libc;
   }
   char* ptr = mapped.data;
-  memcpy(ptr, &header, sizeof(lsof_header));
-  ptr += sizeof(lsof_header);
+  memcpy(ptr, &header, sizeof(bg3_lsof_header));
+  ptr += sizeof(bg3_lsof_header);
   memcpy(ptr, string_buf.data, string_buf.size);
   ptr += string_buf.size;
   memcpy(ptr, writer->node_table.data, writer->node_table.size);
@@ -3232,24 +3264,25 @@ bg3_status lsof_writer_write_file(lsof_writer* writer, char const* path) {
   memcpy(ptr, writer->attr_table.data, writer->attr_table.size);
   ptr += writer->attr_table.size;
   memcpy(ptr, writer->value_table.data, writer->value_table.size);
-  mapped_file_destroy(&mapped);
-  buffer_destroy(&string_buf);
+  bg3_mapped_file_destroy(&mapped);
+  bg3_buffer_destroy(&string_buf);
   return bg3_success;
 }
 
-static inline lsof_writer_stack_frame* lsof_writer_stack(lsof_writer* writer) {
-  return ((lsof_writer_stack_frame*)writer->stack.data);
+static inline bg3_lsof_writer_stack_frame* lsof_writer_stack(bg3_lsof_writer* writer) {
+  return ((bg3_lsof_writer_stack_frame*)writer->stack.data);
 }
 
-static inline lsof_writer_stack_frame* lsof_writer_stack_top(lsof_writer* writer) {
+static inline bg3_lsof_writer_stack_frame* lsof_writer_stack_top(
+    bg3_lsof_writer* writer) {
   return writer->num_stack ? &lsof_writer_stack(writer)[writer->num_stack - 1] : 0;
 }
 
-void lsof_writer_push_node(lsof_writer* writer, char const* node_name) {
-  lsof_node_wide node = {};
-  lsof_writer_stack_frame* parent_frame = lsof_writer_stack_top(writer);
-  lsof_writer_stack_frame child_frame = {};
-  node.name = lsof_symtab_intern(&writer->symtab, node_name);
+void bg3_lsof_writer_push_node(bg3_lsof_writer* writer, char const* node_name) {
+  bg3_lsof_node_wide node = {};
+  bg3_lsof_writer_stack_frame* parent_frame = lsof_writer_stack_top(writer);
+  bg3_lsof_writer_stack_frame child_frame = {};
+  node.name = bg3_lsof_symtab_intern(&writer->symtab, node_name);
   node.parent = parent_frame ? parent_frame->node_id : -1;
   node.next = -1;
   node.attrs = -1;
@@ -3258,52 +3291,53 @@ void lsof_writer_push_node(lsof_writer* writer, char const* node_name) {
   child_frame.last_attr = -1;
   if (parent_frame) {
     if (parent_frame->last_child != -1) {
-      lsof_node_wide* last_child =
-          &((lsof_node_wide*)writer->node_table.data)[parent_frame->last_child];
+      bg3_lsof_node_wide* last_child =
+          &((bg3_lsof_node_wide*)writer->node_table.data)[parent_frame->last_child];
       last_child->next = child_frame.node_id;
     }
     parent_frame->last_child = child_frame.node_id;
   }
   writer->num_stack++;
   writer->num_nodes++;
-  buffer_push(&writer->node_table, &node, sizeof(lsof_node_wide));
-  buffer_push(&writer->stack, &child_frame, sizeof(lsof_writer_stack_frame));
+  bg3_buffer_push(&writer->node_table, &node, sizeof(bg3_lsof_node_wide));
+  bg3_buffer_push(&writer->stack, &child_frame, sizeof(bg3_lsof_writer_stack_frame));
 }
 
-void lsof_writer_push_attr(lsof_writer* writer,
-                           char const* attr_name,
-                           lsof_dt type,
-                           void* ptr,
-                           size_t len) {
-  lsof_writer_stack_frame* frame = lsof_writer_stack_top(writer);
-  lsof_attr_wide attr;
+void bg3_lsof_writer_push_attr(bg3_lsof_writer* writer,
+                               char const* attr_name,
+                               bg3_lsof_dt type,
+                               void* ptr,
+                               size_t len) {
+  bg3_lsof_writer_stack_frame* frame = lsof_writer_stack_top(writer);
+  bg3_lsof_attr_wide attr;
   if (!frame) {
     bg3_panic("no current node");
   }
   if (len >= (1 << 26)) {
     bg3_panic("length overflow");
   }
-  lsof_node_wide* node = &((lsof_node_wide*)writer->node_table.data)[frame->node_id];
-  attr.name = lsof_symtab_intern(&writer->symtab, attr_name);
+  bg3_lsof_node_wide* node =
+      &((bg3_lsof_node_wide*)writer->node_table.data)[frame->node_id];
+  attr.name = bg3_lsof_symtab_intern(&writer->symtab, attr_name);
   attr.type = type;
   attr.length = len;
   attr.next = -1;
   if (frame->last_attr != -1) {
-    lsof_attr_wide* prev_attr =
-        &((lsof_attr_wide*)writer->attr_table.data)[frame->last_attr];
+    bg3_lsof_attr_wide* prev_attr =
+        &((bg3_lsof_attr_wide*)writer->attr_table.data)[frame->last_attr];
     prev_attr->next = writer->num_attrs;
   } else {
     node->attrs = writer->num_attrs;
   }
   frame->last_attr = writer->num_attrs;
   attr.value = writer->value_table.size;
-  buffer_push(&writer->value_table, ptr, len);
-  buffer_push(&writer->attr_table, &attr, sizeof(lsof_attr_wide));
+  bg3_buffer_push(&writer->value_table, ptr, len);
+  bg3_buffer_push(&writer->attr_table, &attr, sizeof(bg3_lsof_attr_wide));
   writer->num_attrs++;
 }
 
-void lsof_writer_pop_node(lsof_writer* writer) {
-  buffer_pop(&writer->stack, sizeof(lsof_writer_stack_frame));
+void bg3_lsof_writer_pop_node(bg3_lsof_writer* writer) {
+  bg3_buffer_pop(&writer->stack, sizeof(bg3_lsof_writer_stack_frame));
   writer->num_stack--;
 }
 
@@ -3315,16 +3349,16 @@ static unsigned long long strtoull10(char const* ptr, char** endptr) {
   return strtoull(ptr, endptr, 10);
 }
 
-static bg3_status lsof_writer_sexp_attr_val(lsof_writer* writer,
-                                            sexp_lexer* l,
+static bg3_status lsof_writer_sexp_attr_val(bg3_lsof_writer* writer,
+                                            bg3_sexp_lexer* l,
                                             char* attr_name) {
   switch (l->next.type) {
-    case sexp_token_type_string:
-      lsof_writer_push_attr(writer, attr_name, lsof_dt_fixedstring, l->next.text.data,
-                            l->next.text.size + 1);
+    case bg3_sexp_token_type_string:
+      bg3_lsof_writer_push_attr(writer, attr_name, bg3_lsof_dt_fixedstring,
+                                l->next.text.data, l->next.text.size + 1);
       SLURP(string);
       break;
-    case sexp_token_type_hash:
+    case bg3_sexp_token_type_hash:
       SLURP(hash);
       MATCH(symbol);
       uint8_t val;
@@ -3335,72 +3369,73 @@ static bg3_status lsof_writer_sexp_attr_val(lsof_writer* writer,
       } else {
         return bg3_error_failed;
       }
-      lsof_writer_push_attr(writer, attr_name, lsof_dt_bool, &val, 1);
+      bg3_lsof_writer_push_attr(writer, attr_name, bg3_lsof_dt_bool, &val, 1);
       SLURP(symbol);
       break;
-    case sexp_token_type_lparen:
+    case bg3_sexp_token_type_lparen:
       SLURP(lparen);
       MATCH(symbol);
-#define DO_CONV(itype, dtype, conv_fn, token)                           \
-  do {                                                                  \
-    SLURP(symbol);                                                      \
-    MATCH(token);                                                       \
-    itype val = (itype)conv_fn(l->next.text.data, 0);                   \
-    lsof_writer_push_attr(writer, attr_name, dtype, &val, sizeof(val)); \
-    SLURP(token);                                                       \
+#define DO_CONV(itype, dtype, conv_fn, token)                               \
+  do {                                                                      \
+    SLURP(symbol);                                                          \
+    MATCH(token);                                                           \
+    itype val = (itype)conv_fn(l->next.text.data, 0);                       \
+    bg3_lsof_writer_push_attr(writer, attr_name, dtype, &val, sizeof(val)); \
+    SLURP(token);                                                           \
   } while (0)
 #define DO_INT(itype, dtype)  DO_CONV(itype, dtype, strtoll10, integer)
 #define DO_UINT(itype, dtype) DO_CONV(itype, dtype, strtoull10, integer)
-#define DO_CONV_VEC(itype, dtype, conv_fn, token, len)                   \
-  do {                                                                   \
-    SLURP(symbol);                                                       \
-    itype data[len];                                                     \
-    for (int i = 0; i < len; ++i) {                                      \
-      MATCH(token);                                                      \
-      data[i] = (itype)conv_fn(l->next.text.data, 0);                    \
-      SLURP(token);                                                      \
-    }                                                                    \
-    lsof_writer_push_attr(writer, attr_name, dtype, data, sizeof(data)); \
+#define DO_CONV_VEC(itype, dtype, conv_fn, token, len)                       \
+  do {                                                                       \
+    SLURP(symbol);                                                           \
+    itype data[len];                                                         \
+    for (int i = 0; i < len; ++i) {                                          \
+      MATCH(token);                                                          \
+      data[i] = (itype)conv_fn(l->next.text.data, 0);                        \
+      SLURP(token);                                                          \
+    }                                                                        \
+    bg3_lsof_writer_push_attr(writer, attr_name, dtype, data, sizeof(data)); \
   } while (0)
 #define DO_FVEC(dtype, len) DO_CONV_VEC(float, dtype, strtof, decimal, len)
 #define DO_IVEC(dtype, len) DO_CONV_VEC(int32_t, dtype, strtoll10, integer, len)
       if (!strcmp(l->next.text.data, "LS")) {
         SLURP(symbol);
         MATCH(string);
-        lsof_writer_push_attr(writer, attr_name, lsof_dt_lsstring, l->next.text.data,
-                              l->next.text.size + 1);
+        bg3_lsof_writer_push_attr(writer, attr_name, bg3_lsof_dt_lsstring,
+                                  l->next.text.data, l->next.text.size + 1);
         SLURP(string);
       } else if (!strcmp(l->next.text.data, "u8")) {
-        DO_UINT(uint8_t, lsof_dt_uint8);
+        DO_UINT(uint8_t, bg3_lsof_dt_uint8);
       } else if (!strcmp(l->next.text.data, "i8")) {
-        DO_INT(int8_t, lsof_dt_int8);
+        DO_INT(int8_t, bg3_lsof_dt_int8);
       } else if (!strcmp(l->next.text.data, "u16")) {
-        DO_UINT(uint16_t, lsof_dt_uint16);
+        DO_UINT(uint16_t, bg3_lsof_dt_uint16);
       } else if (!strcmp(l->next.text.data, "i16")) {
-        DO_INT(int16_t, lsof_dt_int16);
+        DO_INT(int16_t, bg3_lsof_dt_int16);
       } else if (!strcmp(l->next.text.data, "u32")) {
-        DO_UINT(uint32_t, lsof_dt_uint32);
+        DO_UINT(uint32_t, bg3_lsof_dt_uint32);
       } else if (!strcmp(l->next.text.data, "i32")) {
-        DO_INT(int32_t, lsof_dt_int32);
+        DO_INT(int32_t, bg3_lsof_dt_int32);
       } else if (!strcmp(l->next.text.data, "u64")) {
-        DO_UINT(uint64_t, lsof_dt_uint64);
+        DO_UINT(uint64_t, bg3_lsof_dt_uint64);
       } else if (!strcmp(l->next.text.data, "i64")) {
-        DO_INT(int64_t, lsof_dt_int64);
+        DO_INT(int64_t, bg3_lsof_dt_int64);
       } else if (!strcmp(l->next.text.data, "f32")) {
-        DO_CONV(float, lsof_dt_float, strtof, decimal);
+        DO_CONV(float, bg3_lsof_dt_float, strtof, decimal);
       } else if (!strcmp(l->next.text.data, "f64")) {
-        DO_CONV(double, lsof_dt_double, strtod, decimal);
+        DO_CONV(double, bg3_lsof_dt_double, strtod, decimal);
       } else if (!strcmp(l->next.text.data, "uuid")) {
         SLURP(symbol);
         MATCH(string);
-        uuid id;
+        bg3_uuid id;
         int nmatch = sscanf(l->next.text.data, "%08x-%04hx-%04hx-%04hx-%04hx%04hx%04hx",
                             &id.word, &id.half[0], &id.half[1], &id.half[2], &id.half[3],
                             &id.half[4], &id.half[5]);
         if (nmatch != 7 || l->next.text.size != 36) {
           return bg3_error_failed;
         }
-        lsof_writer_push_attr(writer, attr_name, lsof_dt_uuid, &id, sizeof(uuid));
+        bg3_lsof_writer_push_attr(writer, attr_name, bg3_lsof_dt_uuid, &id,
+                                  sizeof(bg3_uuid));
         SLURP(string);
       } else if (!strcmp(l->next.text.data, "TS")) {
         const size_t handle_len = 38;  // 'h' + uuid + nul
@@ -3420,30 +3455,30 @@ static bg3_status lsof_writer_sexp_attr_val(lsof_writer* writer,
         MATCH(integer);
         header->version = (uint16_t)strtoull10(l->next.text.data, 0);
         SLURP(integer);
-        lsof_writer_push_attr(writer, attr_name, lsof_dt_translatedstring, header,
-                              sizeof(*header) + handle_len + 1);
+        bg3_lsof_writer_push_attr(writer, attr_name, bg3_lsof_dt_translatedstring, header,
+                                  sizeof(*header) + handle_len + 1);
       } else if (!strcmp(l->next.text.data, "mat2")) {
-        DO_FVEC(lsof_dt_mat2, 4);
+        DO_FVEC(bg3_lsof_dt_mat2, 4);
       } else if (!strcmp(l->next.text.data, "mat3")) {
-        DO_FVEC(lsof_dt_mat3, 9);
+        DO_FVEC(bg3_lsof_dt_mat3, 9);
       } else if (!strcmp(l->next.text.data, "mat3x4")) {
-        DO_FVEC(lsof_dt_mat3x4, 12);
+        DO_FVEC(bg3_lsof_dt_mat3x4, 12);
       } else if (!strcmp(l->next.text.data, "mat4x3")) {
-        DO_FVEC(lsof_dt_mat4x3, 12);
+        DO_FVEC(bg3_lsof_dt_mat4x3, 12);
       } else if (!strcmp(l->next.text.data, "mat4")) {
-        DO_FVEC(lsof_dt_mat4, 16);
+        DO_FVEC(bg3_lsof_dt_mat4, 16);
       } else if (!strcmp(l->next.text.data, "vec2")) {
-        DO_FVEC(lsof_dt_vec2, 2);
+        DO_FVEC(bg3_lsof_dt_vec2, 2);
       } else if (!strcmp(l->next.text.data, "vec3")) {
-        DO_FVEC(lsof_dt_vec3, 3);
+        DO_FVEC(bg3_lsof_dt_vec3, 3);
       } else if (!strcmp(l->next.text.data, "vec4")) {
-        DO_FVEC(lsof_dt_vec4, 4);
+        DO_FVEC(bg3_lsof_dt_vec4, 4);
       } else if (!strcmp(l->next.text.data, "ivec2")) {
-        DO_IVEC(lsof_dt_ivec2, 2);
+        DO_IVEC(bg3_lsof_dt_ivec2, 2);
       } else if (!strcmp(l->next.text.data, "ivec3")) {
-        DO_IVEC(lsof_dt_ivec3, 3);
+        DO_IVEC(bg3_lsof_dt_ivec3, 3);
       } else if (!strcmp(l->next.text.data, "ivec4")) {
-        DO_IVEC(lsof_dt_ivec4, 4);
+        DO_IVEC(bg3_lsof_dt_ivec4, 4);
       } else {
         return bg3_error_failed;
       }
@@ -3461,19 +3496,19 @@ static bg3_status lsof_writer_sexp_attr_val(lsof_writer* writer,
   return bg3_success;
 }
 
-static bg3_status lsof_writer_sexp_node(lsof_writer* writer,
-                                        sexp_lexer* l,
-                                        buffer* attr_name) {
+static bg3_status lsof_writer_sexp_node(bg3_lsof_writer* writer,
+                                        bg3_sexp_lexer* l,
+                                        bg3_buffer* attr_name) {
   bg3_status status = bg3_success;
   SLURP(lparen);
   MATCH(symbol);
-  lsof_writer_push_node(writer, (char*)l->next.text.data);
+  bg3_lsof_writer_push_node(writer, (char*)l->next.text.data);
   SLURP(symbol);
   SLURP(lparen);
-  while (l->next.type != sexp_token_type_rparen) {
+  while (l->next.type != bg3_sexp_token_type_rparen) {
     SLURP(lparen);
     MATCH(symbol);
-    buffer_copy(attr_name, &l->next.text);
+    bg3_buffer_copy(attr_name, &l->next.text);
     SLURP(symbol);
     status = lsof_writer_sexp_attr_val(writer, l, (char*)attr_name->data);
     if (status) {
@@ -3482,26 +3517,26 @@ static bg3_status lsof_writer_sexp_node(lsof_writer* writer,
     SLURP(rparen);
   }
   SLURP(rparen);
-  while (l->next.type != sexp_token_type_rparen) {
+  while (l->next.type != bg3_sexp_token_type_rparen) {
     status = lsof_writer_sexp_node(writer, l, attr_name);
     if (status) {
       return status;
     }
   }
   SLURP(rparen);
-  lsof_writer_pop_node(writer);
+  bg3_lsof_writer_pop_node(writer);
   return status;
 }
 
-bg3_status lsof_writer_push_sexps(lsof_writer* writer,
-                                  char const* data,
-                                  size_t data_len) {
+bg3_status bg3_lsof_writer_push_sexps(bg3_lsof_writer* writer,
+                                      char const* data,
+                                      size_t data_len) {
   bg3_status status = bg3_success;
-  buffer attr_name = {};
-  sexp_lexer l;
-  sexp_lexer_init(&l, data, data_len);
-  sexp_lexer_advance(&l);
-  while (l.next.type != sexp_token_type_eof) {
+  bg3_buffer attr_name = {};
+  bg3_sexp_lexer l;
+  bg3_sexp_lexer_init(&l, data, data_len);
+  bg3_sexp_lexer_advance(&l);
+  while (l.next.type != bg3_sexp_token_type_eof) {
     if ((status = lsof_writer_sexp_node(writer, &l, &attr_name))) {
       // TODO: how return errzzz0rz
       fprintf(stderr, "parse error near line %d\n", l.line);
@@ -3511,39 +3546,39 @@ bg3_status lsof_writer_push_sexps(lsof_writer* writer,
   return status;
 }
 
-bg3_status loca_reader_init(loca_reader* file, char* data, size_t data_len) {
-  if (data_len < sizeof(loca_header)) {
+bg3_status bg3_loca_reader_init(bg3_loca_reader* file, char* data, size_t data_len) {
+  if (data_len < sizeof(bg3_loca_header)) {
     return bg3_error_failed;
   }
-  memset(file, 0, sizeof(loca_reader));
-  cursor c;
-  cursor_init(&c, data, data_len);
-  cursor_read(&c, &file->header, sizeof(file->header));
+  memset(file, 0, sizeof(bg3_loca_reader));
+  bg3_cursor c;
+  bg3_cursor_init(&c, data, data_len);
+  bg3_cursor_read(&c, &file->header, sizeof(file->header));
   if (file->header.magic != LOCA_MAGIC) {
     return bg3_error_failed;
   }
-  file->entries =
-      (loca_reader_entry*)calloc(file->header.num_entries, sizeof(loca_reader_entry));
+  file->entries = (bg3_loca_reader_entry*)calloc(file->header.num_entries,
+                                                 sizeof(bg3_loca_reader_entry));
   size_t data_offset = file->header.heap_offset;
-  cursor heap_cursor;
-  cursor_init(&heap_cursor, data, data_len);
-  cursor_read(&heap_cursor, 0, file->header.heap_offset);
+  bg3_cursor heap_cursor;
+  bg3_cursor_init(&heap_cursor, data, data_len);
+  bg3_cursor_read(&heap_cursor, 0, file->header.heap_offset);
   for (uint32_t i = 0; i < file->header.num_entries; ++i) {
-    loca_reader_entry_raw raw_entry;
-    loca_reader_entry* entry = &file->entries[i];
-    cursor_read(&c, &raw_entry, sizeof(raw_entry));
+    bg3_loca_reader_entry_raw raw_entry;
+    bg3_loca_reader_entry* entry = &file->entries[i];
+    bg3_cursor_read(&c, &raw_entry, sizeof(raw_entry));
     raw_entry.handle[63] = '\0';
     snprintf(entry->handle, sizeof(entry->handle), "%s", raw_entry.handle);
     entry->version = raw_entry.version;
     entry->data = data + data_offset;
     entry->data_size = (((size_t)raw_entry.size_hi) << 16) | ((size_t)raw_entry.size_lo);
-    cursor_read(&heap_cursor, 0, entry->data_size);
+    bg3_cursor_read(&heap_cursor, 0, entry->data_size);
     data_offset += entry->data_size;
   }
   return bg3_success;
 }
 
-int loca_reader_dump(loca_reader* file) {
+int bg3_loca_reader_dump(bg3_loca_reader* file) {
   for (uint32_t i = 0; i < file->header.num_entries; ++i) {
     printf("%s;%d %s\n", file->entries[i].handle, file->entries[i].version,
            file->entries[i].data);
@@ -3551,68 +3586,68 @@ int loca_reader_dump(loca_reader* file) {
   return -1;
 }
 
-void loca_reader_destroy(loca_reader* file) {
+void bg3_loca_reader_destroy(bg3_loca_reader* file) {
   free(file->entries);
 }
 
-void loca_writer_init(loca_writer* writer) {
-  memset(writer, 0, sizeof(loca_writer));
+void bg3_loca_writer_init(bg3_loca_writer* writer) {
+  memset(writer, 0, sizeof(bg3_loca_writer));
 }
 
-void loca_writer_destroy(loca_writer* writer) {
-  buffer_destroy(&writer->entries);
-  buffer_destroy(&writer->heap);
+void bg3_loca_writer_destroy(bg3_loca_writer* writer) {
+  bg3_buffer_destroy(&writer->entries);
+  bg3_buffer_destroy(&writer->heap);
 }
 
-void loca_writer_push(loca_writer* writer,
-                      char const* handle,
-                      uint16_t version,
-                      char const* text) {
-  loca_reader_entry_raw entry;
+void bg3_loca_writer_push(bg3_loca_writer* writer,
+                          char const* handle,
+                          uint16_t version,
+                          char const* text) {
+  bg3_loca_reader_entry_raw entry;
   size_t len = strlen(text) + 1;
-  memset(&entry, 0, sizeof(loca_reader_entry_raw));
+  memset(&entry, 0, sizeof(bg3_loca_reader_entry_raw));
   snprintf(entry.handle, 64, "%s", handle);
   entry.version = version;
   assert(len <= UINT32_MAX);
   entry.size_lo = len & 0xFFFF;
   entry.size_hi = len >> 16;
-  buffer_push(&writer->entries, &entry, sizeof(loca_reader_entry_raw));
-  buffer_push(&writer->heap, text, len);
+  bg3_buffer_push(&writer->entries, &entry, sizeof(bg3_loca_reader_entry_raw));
+  bg3_buffer_push(&writer->heap, text, len);
 }
 
-bg3_status loca_writer_write_file(loca_writer* writer, char const* path) {
-  mapped_file out;
+bg3_status bg3_loca_writer_write_file(bg3_loca_writer* writer, char const* path) {
+  bg3_mapped_file out;
   bg3_status status;
-  size_t out_len = sizeof(loca_header) + writer->entries.size + writer->heap.size;
-  if ((status = mapped_file_init_rw_trunc(&out, path, out_len))) {
+  size_t out_len = sizeof(bg3_loca_header) + writer->entries.size + writer->heap.size;
+  if ((status = bg3_mapped_file_init_rw_trunc(&out, path, out_len))) {
     return status;
   }
-  loca_header header = {
+  bg3_loca_header header = {
       .magic = LOCA_MAGIC,
-      .num_entries = (uint32_t)(writer->entries.size / sizeof(loca_reader_entry_raw)),
-      .heap_offset = (uint32_t)(sizeof(loca_header) + writer->entries.size),
+      .num_entries = (uint32_t)(writer->entries.size / sizeof(bg3_loca_reader_entry_raw)),
+      .heap_offset = (uint32_t)(sizeof(bg3_loca_header) + writer->entries.size),
   };
   char* ptr = out.data;
-  memcpy(ptr, &header, sizeof(loca_header));
-  ptr += sizeof(loca_header);
+  memcpy(ptr, &header, sizeof(bg3_loca_header));
+  ptr += sizeof(bg3_loca_header);
   memcpy(ptr, writer->entries.data, writer->entries.size);
   ptr += writer->entries.size;
   memcpy(ptr, writer->heap.data, writer->heap.size);
-  mapped_file_destroy(&out);
+  bg3_mapped_file_destroy(&out);
   return bg3_success;
 }
 
 // TODO: this format doesn't seem to make any real alignment guarantees,
 // so probably everything after the layer data needs to deal with
 // unaligned pointers and do copies.
-bg3_status patch_file_init(patch_file* file, char* data, size_t data_len) {
-  memset(file, 0, sizeof(patch_file));
-  cursor c;
-  cursor_init(&c, data, data_len);
-  if (data_len < sizeof(patch_header)) {
+bg3_status bg3_patch_file_init(bg3_patch_file* file, char* data, size_t data_len) {
+  memset(file, 0, sizeof(bg3_patch_file));
+  bg3_cursor c;
+  bg3_cursor_init(&c, data, data_len);
+  if (data_len < sizeof(bg3_patch_header)) {
     return bg3_error_failed;
   }
-  cursor_read(&c, &file->header, sizeof(patch_header));
+  bg3_cursor_read(&c, &file->header, sizeof(bg3_patch_header));
   if (file->header.magic != PATCH_MAGIC) {
     return bg3_error_failed;
   }
@@ -3621,40 +3656,41 @@ bg3_status patch_file_init(patch_file* file, char* data, size_t data_len) {
     // not found one that appears to actually be _used_. implement if needed
     return bg3_error_failed;
   }
-  if (file->header.metadata_size != sizeof(patch_metadata)) {
+  if (file->header.metadata_size != sizeof(bg3_patch_metadata)) {
     return bg3_error_failed;
   }
-  cursor_read(&c, &file->metadata, sizeof(patch_metadata));
+  bg3_cursor_read(&c, &file->metadata, sizeof(bg3_patch_metadata));
   file->data = data;
   file->data_len = data_len;
   file->heightfield = (float*)c.ptr;
-  cursor_read(&c, 0,
-              sizeof(float) * file->metadata.local_cols * file->metadata.local_rows);
+  bg3_cursor_read(&c, 0,
+                  sizeof(float) * file->metadata.local_cols * file->metadata.local_rows);
   if (file->metadata.num_holes) {
     file->holes = (uint32_t*)c.ptr;
-    cursor_read(&c, 0, file->metadata.num_holes * sizeof(uint32_t));
+    bg3_cursor_read(&c, 0, file->metadata.num_holes * sizeof(uint32_t));
   }
-  file->layers = (patch_layer*)malloc(sizeof(patch_layer) * file->metadata.num_layers);
+  file->layers =
+      (bg3_patch_layer*)malloc(sizeof(bg3_patch_layer) * file->metadata.num_layers);
   for (int i = 0; i < file->metadata.num_layers; ++i) {
     uint32_t length;
-    cursor_read(&c, &length, sizeof(uint32_t));
+    bg3_cursor_read(&c, &length, sizeof(uint32_t));
     char* layer_name_ptr = c.ptr;
     file->layers[i].name = strndup(layer_name_ptr, length);
-    cursor_read(&c, 0, length);
-    cursor_read(&c, &length, sizeof(uint32_t));
+    bg3_cursor_read(&c, 0, length);
+    bg3_cursor_read(&c, &length, sizeof(uint32_t));
     if (length != file->metadata.tex_cols * file->metadata.tex_rows) {
       bg3_panic("layer data length has invalid size");
     }
     file->layers[i].weights = (uint8_t*)c.ptr;
-    cursor_read(&c, 0, length);
+    bg3_cursor_read(&c, 0, length);
   }
   uint32_t normal_map_len;
-  cursor_read(&c, &normal_map_len, sizeof(uint32_t));
-  bc7_block* normal_map = (bc7_block*)c.ptr;
-  cursor_read(&c, 0, normal_map_len);
+  bg3_cursor_read(&c, &normal_map_len, sizeof(uint32_t));
+  bg3_bc7_block* normal_map = (bg3_bc7_block*)c.ptr;
+  bg3_cursor_read(&c, 0, normal_map_len);
   int norm_rows = (file->metadata.local_rows + 3) / 4;
   int norm_cols = (file->metadata.local_cols + 3) / 4;
-  if (normal_map_len == sizeof(bc7_block) * norm_rows * norm_cols) {
+  if (normal_map_len == sizeof(bg3_bc7_block) * norm_rows * norm_cols) {
     file->normal_map = normal_map;
     file->normal_map_rows = norm_rows;
     file->normal_map_cols = norm_cols;
@@ -3662,13 +3698,13 @@ bg3_status patch_file_init(patch_file* file, char* data, size_t data_len) {
   for (int i = 0; i < 2; ++i) {
     if (c.ptr < c.end) {
       file->num_keys++;
-      file->keys[i].bounds = (patch_key_bounds*)c.ptr;
-      cursor_read(&c, 0, 0x40);
+      file->keys[i].bounds = (bg3_patch_key_bounds*)c.ptr;
+      bg3_cursor_read(&c, 0, 0x40);
       for (int j = 0; j < 4; ++j) {
         uint32_t length;
-        cursor_read(&c, &length, sizeof(uint32_t));
+        bg3_cursor_read(&c, &length, sizeof(uint32_t));
         char* key_data = c.ptr;
-        cursor_read(&c, 0, length);
+        bg3_cursor_read(&c, 0, length);
         file->keys[i].entries[j].data = key_data;
         file->keys[i].entries[j].data_len = length;
       }
@@ -3677,14 +3713,14 @@ bg3_status patch_file_init(patch_file* file, char* data, size_t data_len) {
   return bg3_success;
 }
 
-void patch_file_destroy(patch_file* file) {
+void bg3_patch_file_destroy(bg3_patch_file* file) {
   for (uint32_t i = 0; i < file->metadata.num_layers; ++i) {
     free(file->layers[i].name);
   }
   free(file->layers);
 }
 
-bg3_status patch_file_dump(patch_file* file) {
+bg3_status bg3_patch_file_dump(bg3_patch_file* file) {
   printf(
       "patch version %d, local (%dx%d) tex (%d,%d) global (%dx%d) chunk "
       "(%x,%x)\n",
@@ -3780,14 +3816,14 @@ bg3_status patch_file_dump(patch_file* file) {
   return bg3_success;
 }
 
-static bool granny_decompress_bitknit(granny_compressor_ops* ops,
+static bool granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
                                       char* output,
                                       size_t output_len,
                                       char* input,
                                       size_t input_len) {
   bool ok = true;
   char tmpbuf[0x4000];
-  void* context = ops->begin_file_decompression(granny_compression_bitknit2, false,
+  void* context = ops->begin_file_decompression(bg3_granny_compression_bitknit2, false,
                                                 output_len, output, 0x4000, tmpbuf);
   if (!context) {
     return false;
@@ -3805,45 +3841,45 @@ static bool granny_decompress_bitknit(granny_compressor_ops* ops,
   return ok;
 }
 
-bg3_status granny_reader_init(granny_reader* reader,
+bg3_status granny_reader_init(bg3_granny_reader* reader,
                               char* data,
                               size_t data_len,
-                              granny_compressor_ops* compressor_ops) {
-  memset(reader, 0, sizeof(granny_reader));
+                              bg3_granny_compressor_ops* compressor_ops) {
+  memset(reader, 0, sizeof(bg3_granny_reader));
   reader->data = data;
   reader->data_len = data_len;
-  cursor c;
-  cursor_init(&c, data, data_len);
-  if (data_len < sizeof(granny_magic)) {
+  bg3_cursor c;
+  bg3_cursor_init(&c, data, data_len);
+  if (data_len < sizeof(bg3_granny_magic)) {
     return bg3_error_failed;
   }
-  cursor_read(&c, &reader->magic, sizeof(granny_magic));
+  bg3_cursor_read(&c, &reader->magic, sizeof(bg3_granny_magic));
   if (reader->magic.lo != GRANNY_MAGIC_LO || reader->magic.hi != GRANNY_MAGIC_HI) {
     return bg3_error_failed;
   }
-  cursor_read(&c, &reader->header, sizeof(granny_header));
+  bg3_cursor_read(&c, &reader->header, sizeof(bg3_granny_header));
   if (reader->header.format_version != GRANNY_VERSION) {
     return bg3_error_failed;
   }
-  size_t section_offset = reader->header.section_table + sizeof(granny_magic);
+  size_t section_offset = reader->header.section_table + sizeof(bg3_granny_magic);
   if (c.ptr - c.start != section_offset) {
     return bg3_error_failed;
   }
   int section_size =
       (reader->magic.header_size - section_offset) / reader->header.num_sections;
-  if (section_size != sizeof(granny_section_header)) {
+  if (section_size != sizeof(bg3_granny_section_header)) {
     return bg3_error_failed;
   }
-  reader->section_headers = (granny_section_header*)c.ptr;
-  reader->sections =
-      (granny_section*)calloc(reader->header.num_sections, sizeof(granny_section));
+  reader->section_headers = (bg3_granny_section_header*)c.ptr;
+  reader->sections = (bg3_granny_section*)calloc(reader->header.num_sections,
+                                                 sizeof(bg3_granny_section));
   for (uint32_t i = 0; i < reader->header.num_sections; ++i) {
-    granny_section_header* sect = &reader->section_headers[i];
+    bg3_granny_section_header* sect = &reader->section_headers[i];
     // TODO bounds checking
     if (sect->compression) {
       void* output = calloc(1, sect->uncompressed_len);
       int result;
-      if (sect->compression == granny_compression_bitknit2) {
+      if (sect->compression == bg3_granny_compression_bitknit2) {
         result = granny_decompress_bitknit(compressor_ops, (char*)output,
                                            sect->uncompressed_len, c.start + sect->offset,
                                            sect->compressed_len);
@@ -3866,25 +3902,25 @@ bg3_status granny_reader_init(granny_reader* reader,
     }
   }
   for (uint32_t i = 0; i < reader->header.num_sections; ++i) {
-    granny_section_header* sect = &reader->section_headers[i];
+    bg3_granny_section_header* sect = &reader->section_headers[i];
     bool owns_fixups = false;
-    granny_fixup* fixups;
-    if (sect->compression == granny_compression_bitknit2) {
-      size_t fixups_len = sect->num_fixups * sizeof(granny_fixup);
-      fixups = (granny_fixup*)calloc(1, fixups_len);
+    bg3_granny_fixup* fixups;
+    if (sect->compression == bg3_granny_compression_bitknit2) {
+      size_t fixups_len = sect->num_fixups * sizeof(bg3_granny_fixup);
+      fixups = (bg3_granny_fixup*)calloc(1, fixups_len);
       owns_fixups = true;
-      cursor_seek(&c, sect->fixups_offset);
+      bg3_cursor_seek(&c, sect->fixups_offset);
       uint32_t compressed_len;
-      cursor_read(&c, &compressed_len, sizeof(uint32_t));
+      bg3_cursor_read(&c, &compressed_len, sizeof(uint32_t));
       if (!granny_decompress_bitknit(compressor_ops, (char*)fixups, fixups_len, c.ptr,
                                      compressed_len)) {
         bg3_panic("fixups decompress failed\n");
       }
     } else {
-      fixups = (granny_fixup*)(c.start + sect->fixups_offset);
+      fixups = (bg3_granny_fixup*)(c.start + sect->fixups_offset);
     }
     for (uint32_t fixup_idx = 0; fixup_idx < sect->num_fixups; ++fixup_idx) {
-      granny_fixup* r = fixups + fixup_idx;
+      bg3_granny_fixup* r = fixups + fixup_idx;
       uint64_t resolved = (uint64_t)reader->sections[r->ptr.section].data + r->ptr.offset;
       memcpy(reader->sections[i].data + r->section_offset, &resolved, sizeof(uint64_t));
     }
@@ -3895,47 +3931,47 @@ bg3_status granny_reader_init(granny_reader* reader,
   return bg3_success;
 }
 
-void sexp_token_copy(sexp_token* dest, sexp_token* src) {
+void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src) {
   assert(dest != src);
   dest->type = src->type;
-  buffer_copy(&dest->text, &src->text);
+  bg3_buffer_copy(&dest->text, &src->text);
   dest->int_val = src->int_val;
   dest->line = src->line;
   dest->col = src->col;
   dest->len = src->len;
 }
 
-void sexp_lexer_copy(sexp_lexer* dest, sexp_lexer* src) {
+void bg3_sexp_lexer_copy(bg3_sexp_lexer* dest, bg3_sexp_lexer* src) {
   assert(dest != src);
-  sexp_token_copy(&dest->next, &src->next);
+  bg3_sexp_token_copy(&dest->next, &src->next);
   dest->line = src->line;
   dest->col = src->col;
   dest->c = src->c;
 }
 
-void sexp_lexer_init(sexp_lexer* lexer, char const* data, size_t data_len) {
-  memset(lexer, 0, sizeof(sexp_lexer));
+void bg3_sexp_lexer_init(bg3_sexp_lexer* lexer, char const* data, size_t data_len) {
+  memset(lexer, 0, sizeof(bg3_sexp_lexer));
   lexer->line = 1;
   lexer->col = 0;
-  cursor_init(&lexer->c, (char*)data, data_len);
+  bg3_cursor_init(&lexer->c, (char*)data, data_len);
 }
 
-void sexp_lexer_init_cstr(sexp_lexer* lexer, char const* text) {
-  sexp_lexer_init(lexer, text, strlen(text));
+void bg3_sexp_lexer_init_cstr(bg3_sexp_lexer* lexer, char const* text) {
+  bg3_sexp_lexer_init(lexer, text, strlen(text));
 }
 
-void sexp_lexer_destroy(sexp_lexer* lexer) {
-  buffer_destroy(&lexer->next.text);
+void bg3_sexp_lexer_destroy(bg3_sexp_lexer* lexer) {
+  bg3_buffer_destroy(&lexer->next.text);
 }
 
-static void sexp_lexer_begin_token(sexp_lexer* lexer, sexp_token_type type) {
+static void sexp_lexer_begin_token(bg3_sexp_lexer* lexer, bg3_sexp_token_type type) {
   lexer->next.text.size = 0;
   lexer->next.type = type;
   lexer->next.line = lexer->line;
   lexer->next.col = lexer->col;
 }
 
-void sexp_lexer_advance(sexp_lexer* lexer) {
+void bg3_sexp_lexer_advance(bg3_sexp_lexer* lexer) {
   enum {
     whitespace,
     comment,
@@ -3958,7 +3994,7 @@ void sexp_lexer_advance(sexp_lexer* lexer) {
     state = new_state;     \
     continue;              \
   }
-  sexp_lexer_begin_token(lexer, sexp_token_type_eof);
+  sexp_lexer_begin_token(lexer, bg3_sexp_token_type_eof);
   while (lexer->c.ptr < lexer->c.end && state != done) {
     char c = *lexer->c.ptr;
     switch (state) {
@@ -3975,31 +4011,31 @@ void sexp_lexer_advance(sexp_lexer* lexer) {
           CONSUME(whitespace);
         }
         if (isdigit(c) || c == '-') {
-          sexp_lexer_begin_token(lexer, sexp_token_type_integer);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_integer);
           REPARSE(integer);
         }
         if (c == '\"') {
           state = string;
-          sexp_lexer_begin_token(lexer, sexp_token_type_string);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_string);
           CONSUME(string);
         }
         if (c == '(' || c == '[') {
-          sexp_lexer_begin_token(lexer, sexp_token_type_lparen);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_lparen);
           CONSUME(done);
         }
         if (c == ')' || c == ']') {
-          sexp_lexer_begin_token(lexer, sexp_token_type_rparen);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_rparen);
           CONSUME(done);
         }
         if (c == '#') {
-          sexp_lexer_begin_token(lexer, sexp_token_type_hash);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_hash);
           CONSUME(done);
         }
         if (c != '.' && c != '{' && c != '}') {
-          sexp_lexer_begin_token(lexer, sexp_token_type_symbol);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_symbol);
           REPARSE(symbol);
         }
-        sexp_lexer_begin_token(lexer, sexp_token_type_invalid);
+        sexp_lexer_begin_token(lexer, bg3_sexp_token_type_invalid);
         REPARSE(done);
       case comment:
         if (c == '\n' || c == '\r') {
@@ -4023,18 +4059,18 @@ void sexp_lexer_advance(sexp_lexer* lexer) {
             c == ']' || c == '(' || c == ')' || c == ';') {
           REPARSE(done);
         }
-        buffer_putchar(&lexer->next.text, c);
+        bg3_buffer_putchar(&lexer->next.text, c);
         CONSUME(symbol);
       case integer:
         if (c == '.') {
-          lexer->next.type = sexp_token_type_decimal;
-          buffer_putchar(&lexer->next.text, '.');
+          lexer->next.type = bg3_sexp_token_type_decimal;
+          bg3_buffer_putchar(&lexer->next.text, '.');
           CONSUME(decimal);
         }
         // fall through
       case decimal:
         if (isdigit(c) || (c == '-' && lexer->next.text.size == 0)) {
-          buffer_putchar(&lexer->next.text, c);
+          bg3_buffer_putchar(&lexer->next.text, c);
           CONSUME(state);
         }
         REPARSE(done);
@@ -4047,18 +4083,18 @@ void sexp_lexer_advance(sexp_lexer* lexer) {
         }
         if (c == '\r' || c == '\n') {
           // no multi-line strings atm
-          sexp_lexer_begin_token(lexer, sexp_token_type_invalid);
+          sexp_lexer_begin_token(lexer, bg3_sexp_token_type_invalid);
           REPARSE(done);
         }
-        buffer_putchar(&lexer->next.text, c);
+        bg3_buffer_putchar(&lexer->next.text, c);
         CONSUME(string);
       case string_escape:
         if (c == '\n') {
-          buffer_putchar(&lexer->next.text, '\n');
+          bg3_buffer_putchar(&lexer->next.text, '\n');
         } else if (c == '\r') {
-          buffer_putchar(&lexer->next.text, '\r');
+          bg3_buffer_putchar(&lexer->next.text, '\r');
         } else {
-          buffer_putchar(&lexer->next.text, c);
+          bg3_buffer_putchar(&lexer->next.text, c);
         }
         CONSUME(string);
       default:
@@ -4070,33 +4106,33 @@ void sexp_lexer_advance(sexp_lexer* lexer) {
     lexer->col++;
     lexer->c.ptr++;
   }
-  buffer_putchar(&lexer->next.text, 0);
+  bg3_buffer_putchar(&lexer->next.text, 0);
   lexer->next.text.size--;
-  if (lexer->next.type == sexp_token_type_integer) {
+  if (lexer->next.type == bg3_sexp_token_type_integer) {
     lexer->next.int_val = strtoll(lexer->next.text.data, 0, 10);
-  } else if (lexer->next.type == sexp_token_type_decimal) {
+  } else if (lexer->next.type == bg3_sexp_token_type_decimal) {
     lexer->next.float_val = strtod(lexer->next.text.data, 0);
   }
 }
 
-void ibuf_init(indent_buffer* buf) {
-  memset(buf, 0, sizeof(indent_buffer));
+void bg3_ibuf_init(bg3_indent_buffer* buf) {
+  memset(buf, 0, sizeof(bg3_indent_buffer));
 }
 
-void ibuf_destroy(indent_buffer* buf) {
-  buffer_destroy(&buf->stack);
-  buffer_destroy(&buf->tmp);
-  buffer_destroy(&buf->output);
+void bg3_ibuf_destroy(bg3_indent_buffer* buf) {
+  bg3_buffer_destroy(&buf->stack);
+  bg3_buffer_destroy(&buf->tmp);
+  bg3_buffer_destroy(&buf->output);
 }
 
-void ibuf_clear(indent_buffer* buf) {
+void bg3_ibuf_clear(bg3_indent_buffer* buf) {
   buf->stack.size = 0;
   buf->output.size = 0;
   buf->tmp.size = 0;
   buf->line_len = 0;
 }
 
-uint32_t ibuf_get_indent(indent_buffer* buf) {
+uint32_t bg3_ibuf_get_indent(bg3_indent_buffer* buf) {
   if (buf->stack.size) {
     size_t depth = buf->stack.size / sizeof(uint32_t);
     uint32_t* items = (uint32_t*)buf->stack.data;
@@ -4105,58 +4141,58 @@ uint32_t ibuf_get_indent(indent_buffer* buf) {
   return 0;
 }
 
-uint32_t ibuf_get_next_col(indent_buffer* buf) {
-  return buf->line_len ? buf->line_len : ibuf_get_indent(buf);
+uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf) {
+  return buf->line_len ? buf->line_len : bg3_ibuf_get_indent(buf);
 }
 
-void ibuf_push_align(indent_buffer* buf) {
+void bg3_ibuf_push_align(bg3_indent_buffer* buf) {
   // TODO: this doesn't account for utf8 extended grapheme whatevers
-  ibuf_push(buf, buf->line_len - MIN(buf->line_len, ibuf_get_indent(buf)));
+  bg3_ibuf_push(buf, buf->line_len - MIN(buf->line_len, bg3_ibuf_get_indent(buf)));
 }
 
-void ibuf_push(indent_buffer* buf, uint32_t width) {
-  width += ibuf_get_indent(buf);
-  buffer_push(&buf->stack, &width, sizeof(uint32_t));
+void bg3_ibuf_push(bg3_indent_buffer* buf, uint32_t width) {
+  width += bg3_ibuf_get_indent(buf);
+  bg3_buffer_push(&buf->stack, &width, sizeof(uint32_t));
 }
 
-void ibuf_pop(indent_buffer* buf) {
-  buffer_pop(&buf->stack, sizeof(uint32_t));
+void bg3_ibuf_pop(bg3_indent_buffer* buf) {
+  bg3_buffer_pop(&buf->stack, sizeof(uint32_t));
 }
 
-static void ibuf_putchar(indent_buffer* buf, char c) {
+static void ibuf_putchar(bg3_indent_buffer* buf, char c) {
   if (c == '\n') {
     buf->line_len = 0;
   } else if (!buf->line_len) {
-    uint32_t level = ibuf_get_indent(buf);
+    uint32_t level = bg3_ibuf_get_indent(buf);
     for (uint32_t i = 0; i < level; ++i) {
-      buffer_putchar(&buf->output, ' ');
+      bg3_buffer_putchar(&buf->output, ' ');
     }
     buf->line_len = level;
   }
   if (c != '\n') {
     buf->line_len++;
   }
-  buffer_putchar(&buf->output, c);
+  bg3_buffer_putchar(&buf->output, c);
 }
 
-void ibuf_fresh_line(indent_buffer* buf) {
+void bg3_ibuf_fresh_line(bg3_indent_buffer* buf) {
   if (buf->line_len) {
     ibuf_putchar(buf, '\n');
   }
 }
 
-void ibuf_vprintf(indent_buffer* buf, char const* fmt, va_list args) {
+void bg3_ibuf_vprintf(bg3_indent_buffer* buf, char const* fmt, va_list args) {
   buf->tmp.size = 0;
-  buffer_vprintf(&buf->tmp, fmt, args);
+  bg3_buffer_vprintf(&buf->tmp, fmt, args);
   for (int i = 0; i < buf->tmp.size; ++i) {
     ibuf_putchar(buf, buf->tmp.data[i]);
   }
 }
 
-void ibuf_printf(indent_buffer* buf, char const* fmt, ...) {
+void bg3_ibuf_printf(bg3_indent_buffer* buf, char const* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  ibuf_vprintf(buf, fmt, ap);
+  bg3_ibuf_vprintf(buf, fmt, ap);
   va_end(ap);
 }
 
@@ -4189,7 +4225,7 @@ static void print_granny_type(granny_type_info* info, int indent) {
     }
     if (info->reference_type) {
       granny_data_type prev_type = first->type;
-      first->type = granny_dt_end;
+      first->type = bg3_granny_dt_end;
       print_granny_type(info->reference_type, indent + 2);
       first->type = prev_type;
     }
@@ -4339,13 +4375,13 @@ bg3_status do_granny(int argc, char const** argv) {
 typedef struct index_pak_work {
   char* name;
   bool failed;
-  mapped_file mapped;
-  lspk_file file;
+  bg3_mapped_file mapped;
+  bg3_lspk_file file;
 } index_pak_work;
 
 typedef struct index_work_item {
   size_t pak_idx;
-  lspk_manifest_entry* entry;
+  bg3_lspk_manifest_entry* entry;
 } index_work_item;
 
 typedef struct index_symtab_entry {
@@ -4356,20 +4392,20 @@ typedef struct index_symtab_entry {
 } index_symtab_entry;
 
 typedef struct index_symtab {
-  hash lookup;
+  bg3_hash lookup;
   size_t num_entries;
   size_t cap_entries;
   index_symtab_entry* entries;
 } index_symtab;
 
 typedef struct index_per_thread {
-  arena tmp;
+  bg3_arena tmp;
   size_t num_items;
   size_t cap_items;
   index_work_item* items;
   index_symtab symtab;
   size_t num_merge_entries;
-  hash_entry* merge_entries;
+  bg3_hash_entry* merge_entries;
   bool owns_merge_entries;
 } index_per_thread;
 
@@ -4384,20 +4420,20 @@ typedef struct index_global {
   index_work_item* items;
   index_per_thread* threads;
   size_t num_merge_buffer_entries_per_side;
-  hash_entry* merge_buffer;
+  bg3_hash_entry* merge_buffer;
 } index_global;
 
-static void index_symtab_init(index_symtab* symtab, arena* a) {
-  hash_init(&symtab->lookup, &symtab_case_hash_ops, a);
+static void index_symtab_init(index_symtab* symtab, bg3_arena* a) {
+  bg3_hash_init(&symtab->lookup, &symtab_case_hash_ops, a);
 }
 
 static void index_symtab_destroy(index_symtab* symtab) {
-  hash_destroy(&symtab->lookup);
+  bg3_hash_destroy(&symtab->lookup);
 }
 
 static int index_lookup_compare(void const* lhs, void const* rhs) {
-  hash_entry const* left = (hash_entry const*)lhs;
-  hash_entry const* right = (hash_entry const*)rhs;
+  bg3_hash_entry const* left = (bg3_hash_entry const*)lhs;
+  bg3_hash_entry const* right = (bg3_hash_entry const*)rhs;
   bool is_left_dead = left->key == HASH_TOMBSTONE_VALUE || left->key == HASH_EMPTY_VALUE;
   bool is_right_dead =
       right->key == HASH_TOMBSTONE_VALUE || right->key == HASH_EMPTY_VALUE;
@@ -4457,22 +4493,22 @@ static void index_symtab_enter_string(index_symtab* symtab,
       .prev_idx = PACK_SYMVAL(symval),
       .next_idx = PACK_SYMVAL(symval),
   };
-  array_push((arena*)symtab->lookup.user_data, symtab, entries, entry);
-  hash_entry* existing;
-  if (!hash_try_set(&symtab->lookup, str, symval, &existing)) {
+  array_push((bg3_arena*)symtab->lookup.user_data, symtab, entries, entry);
+  bg3_hash_entry* existing;
+  if (!bg3_hash_try_set(&symtab->lookup, str, symval, &existing)) {
     index_symtab_link_symbols(global, existing->value, symval);
   }
 }
 
 static void index_symtab_enter_attr(index_symtab* symtab,
                                     index_global* global,
-                                    lsof_reader* reader,
+                                    bg3_lsof_reader* reader,
                                     size_t item_idx,
                                     int thread_num,
                                     size_t node_idx,
                                     size_t attr_idx,
                                     size_t attr_idx_in_node,
-                                    lsof_attr_wide* attr) {
+                                    bg3_lsof_attr_wide* attr) {
   if (attr_idx_in_node > 255) {
     return;
   }
@@ -4482,12 +4518,12 @@ static void index_symtab_enter_attr(index_symtab* symtab,
   char* raw_attr = reader->value_table_raw + offset;
   char tmpbuf[48];
   switch (attr->type) {
-    case lsof_dt_fixedstring:
-    case lsof_dt_lsstring:
+    case bg3_lsof_dt_fixedstring:
+    case bg3_lsof_dt_lsstring:
       index_symtab_enter_string(symtab, global, item_idx, thread_num, raw_attr, true,
                                 item_val);
       break;
-    case lsof_dt_translatedstring: {
+    case bg3_lsof_dt_translatedstring: {
       uint16_t version;
       uint32_t string_len;
       memcpy(&version, raw_attr, sizeof(uint16_t));
@@ -4501,9 +4537,9 @@ static void index_symtab_enter_attr(index_symtab* symtab,
       }
       break;
     }
-    case lsof_dt_uuid: {
-      uuid id;
-      if (attr->length != sizeof(uuid)) {
+    case bg3_lsof_dt_uuid: {
+      bg3_uuid id;
+      if (attr->length != sizeof(bg3_uuid)) {
         break;
       }
       memcpy(&id, raw_attr, sizeof(id));
@@ -4515,10 +4551,10 @@ static void index_symtab_enter_attr(index_symtab* symtab,
   }
 }
 
-static int index_worker(parallel_for_thread* tcb) {
+static int index_worker(bg3_parallel_for_thread* tcb) {
   index_global* global = (index_global*)tcb->user_data;
   index_per_thread* local = global->threads + tcb->thread_num;
-  arena_init(&local->tmp, 1024 * 1024, 1024);
+  bg3_arena_init(&local->tmp, 1024 * 1024, 1024);
   // Phase 1: gather pak files
   if (!tcb->thread_num) {
     for (int i = 1; i < global->argc - 1; ++i) {
@@ -4529,9 +4565,10 @@ static int index_worker(parallel_for_thread* tcb) {
       } else {
         struct dirent* de;
         while ((de = readdir(dir))) {
-          if (strcasesuffix(de->d_name, ".pak")) {
+          if (bg3_strcasesuffix(de->d_name, ".pak")) {
             index_pak_work work = {
-                .name = arena_sprintf(&local->tmp, "%s/%s", global->argv[i], de->d_name),
+                .name =
+                    bg3_arena_sprintf(&local->tmp, "%s/%s", global->argv[i], de->d_name),
             };
             array_push(&local->tmp, global, paks, work);
           }
@@ -4540,38 +4577,39 @@ static int index_worker(parallel_for_thread* tcb) {
       }
     }
   }
-  sync_threads(tcb);
+  bg3_sync_threads(tcb);
   if (global->failed) {
     return (int)bg3_error_failed;
   }
   // Phase 2: load pak files
   for (int i = tcb->thread_num; i < global->num_paks; i += tcb->thread_count) {
     index_pak_work* pak_work = global->paks + i;
-    if (mapped_file_init_ro(&pak_work->mapped, pak_work->name)) {
+    if (bg3_mapped_file_init_ro(&pak_work->mapped, pak_work->name)) {
       pak_work->failed = true;
     }
-    if (!pak_work->failed && lspk_file_init(&pak_work->file, &pak_work->mapped)) {
-      mapped_file_destroy(&pak_work->mapped);
+    if (!pak_work->failed && bg3_lspk_file_init(&pak_work->file, &pak_work->mapped)) {
+      bg3_mapped_file_destroy(&pak_work->mapped);
       pak_work->failed = true;
     }
     if (!pak_work->failed) {
       for (size_t j = 0; j < pak_work->file.num_files; ++j) {
-        lspk_manifest_entry* entry = pak_work->file.manifest + j;
-        if (strcasesuffix(entry->name, ".lsf") || strcasesuffix(entry->name, ".loca")) {
+        bg3_lspk_manifest_entry* entry = pak_work->file.manifest + j;
+        if (bg3_strcasesuffix(entry->name, ".lsf") ||
+            bg3_strcasesuffix(entry->name, ".loca")) {
           index_work_item work = {.pak_idx = (size_t)i, .entry = entry};
           array_push(&local->tmp, local, items, work);
         }
       }
     }
   }
-  sync_threads(tcb);
+  bg3_sync_threads(tcb);
   // Phase 3: gather global file list
   if (!tcb->thread_num) {
     size_t total_entries = 0, next_entry = 0;
     for (int i = 0; i < tcb->thread_count; ++i) {
       total_entries += global->threads[i].num_items;
     }
-    index_work_item* global_items = (index_work_item*)arena_alloc(
+    index_work_item* global_items = (index_work_item*)bg3_arena_alloc(
         &local->tmp, sizeof(index_work_item) * total_entries);
     for (int i = 0; i < tcb->thread_count; ++i) {
       memcpy(global_items + next_entry, global->threads[i].items,
@@ -4581,22 +4619,22 @@ static int index_worker(parallel_for_thread* tcb) {
     global->num_items = total_entries;
     global->items = global_items;
   }
-  sync_threads(tcb);
+  bg3_sync_threads(tcb);
   // Phase 4: build per-thread indices
   index_symtab_init(&local->symtab, &local->tmp);
   for (int i = tcb->thread_num; i < global->num_items; i += tcb->thread_count) {
-    lspk_file* lspk = &global->paks[global->items[i].pak_idx].file;
-    lspk_manifest_entry* entry = global->items[i].entry;
+    bg3_lspk_file* lspk = &global->paks[global->items[i].pak_idx].file;
+    bg3_lspk_manifest_entry* entry = global->items[i].entry;
     char* data = 0;
     size_t data_len = 0;
     bool owns_data = false;
     if (LSPK_ENTRY_COMPRESSION_METHOD(entry->compression)) {
-      if (lspk_file_extract(lspk, entry, 0, &data_len) != bg3_error_overflow) {
+      if (bg3_lspk_file_extract(lspk, entry, 0, &data_len) != bg3_error_overflow) {
         goto file_out;
       }
       data = (char*)malloc(data_len);
       owns_data = true;
-      if (lspk_file_extract(lspk, entry, data, &data_len)) {
+      if (bg3_lspk_file_extract(lspk, entry, data, &data_len)) {
         goto file_out;
       }
     } else {
@@ -4604,21 +4642,21 @@ static int index_worker(parallel_for_thread* tcb) {
       data_len = entry->compressed_size;
       data = lspk->mapped->data + entry_offset;
     }
-    if (strcasesuffix(entry->name, ".lsf")) {
-      lsof_reader reader;
-      if (lsof_reader_init(&reader, data, data_len)) {
+    if (bg3_strcasesuffix(entry->name, ".lsf")) {
+      bg3_lsof_reader reader;
+      if (bg3_lsof_reader_init(&reader, data, data_len)) {
         goto file_out;
       }
-      lsof_reader_ensure_value_offsets(&reader);
+      bg3_lsof_reader_ensure_value_offsets(&reader);
       bool is_wide = IS_SET(reader.header.flags, LSOF_FLAG_HAS_SIBLING_POINTERS);
       for (size_t node_idx = 0; node_idx < reader.num_nodes; ++node_idx) {
-        lsof_node_wide node;
-        lsof_reader_get_node(&reader, &node, node_idx);
+        bg3_lsof_node_wide node;
+        bg3_lsof_reader_get_node(&reader, &node, node_idx);
         size_t attr_idx = node.attrs;
         size_t attr_index_in_node = 0;
         while (attr_idx != -1) {
-          lsof_attr_wide attr;
-          lsof_reader_get_attr(&reader, &attr, attr_idx);
+          bg3_lsof_attr_wide attr;
+          bg3_lsof_reader_get_attr(&reader, &attr, attr_idx);
           if (!is_wide && attr.owner != node_idx) {
             break;
           }
@@ -4635,10 +4673,10 @@ static int index_worker(parallel_for_thread* tcb) {
           attr_index_in_node++;
         }
       }
-      lsof_reader_destroy(&reader);
-    } else if (strcasesuffix(entry->name, ".loca")) {
-      loca_reader reader;
-      if (loca_reader_init(&reader, data, data_len)) {
+      bg3_lsof_reader_destroy(&reader);
+    } else if (bg3_strcasesuffix(entry->name, ".loca")) {
+      bg3_loca_reader reader;
+      if (bg3_loca_reader_init(&reader, data, data_len)) {
         goto file_out;
       }
       for (uint32_t entry_idx = 0; entry_idx < reader.header.num_entries; ++entry_idx) {
@@ -4647,7 +4685,7 @@ static int index_worker(parallel_for_thread* tcb) {
         index_symtab_enter_string(&local->symtab, global, i, tcb->thread_num,
                                   reader.entries[entry_idx].data, true, entry_idx);
       }
-      loca_reader_destroy(&reader);
+      bg3_loca_reader_destroy(&reader);
     } else {
       bg3_panic("collected a file extension we don't know how to handle");
     }
@@ -4657,15 +4695,15 @@ static int index_worker(parallel_for_thread* tcb) {
     }
   }
   // yoink the buffer out of the hash table
-  qsort(local->symtab.lookup.entries, local->symtab.lookup.table_size, sizeof(hash_entry),
-        index_lookup_compare);
+  qsort(local->symtab.lookup.entries, local->symtab.lookup.table_size,
+        sizeof(bg3_hash_entry), index_lookup_compare);
   local->num_merge_entries = local->symtab.lookup.num_keys;
   local->merge_entries = local->symtab.lookup.entries;
   local->owns_merge_entries = true;
   local->symtab.lookup.entries = 0;
   local->symtab.lookup.table_size = 0;
   local->symtab.lookup.num_keys = 0;
-  sync_threads(tcb);
+  bg3_sync_threads(tcb);
   // Phase 5: Merge setup: allocate the merge buffer
   if (!tcb->thread_num) {
     size_t total_entries = 0;
@@ -4673,19 +4711,19 @@ static int index_worker(parallel_for_thread* tcb) {
       total_entries += global->threads[i].num_merge_entries;
     }
     global->num_merge_buffer_entries_per_side = total_entries;
-    global->merge_buffer =
-        (hash_entry*)arena_alloc(&local->tmp, total_entries * 2 * sizeof(hash_entry));
+    global->merge_buffer = (bg3_hash_entry*)bg3_arena_alloc(
+        &local->tmp, total_entries * 2 * sizeof(bg3_hash_entry));
   }
   // Phase 6: Merge per-thread sorted entry arrays
-  int num_streams = next_power_of_2(tcb->thread_count);
+  int num_streams = bg3__next_power_of_2(tcb->thread_count);
   for (int stride = 2, step = 0; num_streams > 1;
        stride <<= 1, num_streams >>= 1, step++) {
-    sync_threads(tcb);  // wait for streams to be ready
+    bg3_sync_threads(tcb);  // wait for streams to be ready
     int left_stream = tcb->thread_num * stride, right_stream = left_stream + (stride / 2);
     size_t new_num_merge_entries = 0;
-    hash_entry* new_merge_entries = 0;
+    bg3_hash_entry* new_merge_entries = 0;
     if (left_stream < tcb->thread_count && right_stream < tcb->thread_count) {
-      hash_entry* output = global->merge_buffer;
+      bg3_hash_entry* output = global->merge_buffer;
       if (step & 1) {
         output += global->num_merge_buffer_entries_per_side;
       }
@@ -4694,13 +4732,13 @@ static int index_worker(parallel_for_thread* tcb) {
         output += global->threads[other_left].num_merge_entries;
         output += global->threads[other_right].num_merge_entries;
       }
-      hash_entry* output_base = output;
+      bg3_hash_entry* output_base = output;
       index_per_thread* left_thread = global->threads + left_stream;
       index_per_thread* right_thread = global->threads + right_stream;
-      hash_entry* left_input = left_thread->merge_entries;
-      hash_entry* left_input_end = left_input + left_thread->num_merge_entries;
-      hash_entry* right_input = right_thread->merge_entries;
-      hash_entry* right_input_end = right_input + right_thread->num_merge_entries;
+      bg3_hash_entry* left_input = left_thread->merge_entries;
+      bg3_hash_entry* left_input_end = left_input + left_thread->num_merge_entries;
+      bg3_hash_entry* right_input = right_thread->merge_entries;
+      bg3_hash_entry* right_input_end = right_input + right_thread->num_merge_entries;
       while (left_input < left_input_end && right_input < right_input_end) {
         int rel = strcmp((char const*)left_input->key, (char const*)right_input->key);
         if (rel < 0) {
@@ -4716,10 +4754,10 @@ static int index_worker(parallel_for_thread* tcb) {
       size_t remainder = 0;
       if (left_input < left_input_end) {
         remainder = left_input_end - left_input;
-        memcpy(output, left_input, remainder * sizeof(hash_entry));
+        memcpy(output, left_input, remainder * sizeof(bg3_hash_entry));
       } else if (right_input < right_input_end) {
         remainder = right_input_end - right_input;
-        memcpy(output, right_input, remainder * sizeof(hash_entry));
+        memcpy(output, right_input, remainder * sizeof(bg3_hash_entry));
       }
       output += remainder;
       new_merge_entries = output_base;
@@ -4750,104 +4788,108 @@ bg3_status do_index(int argc, char const** argv) {
     fprintf(stderr, "syntax: %s <data path>... <index file>\n", argv[0]);
     return bg3_error_failed;
   }
-  int nthreads = MIN(128, 2 * parallel_for_ncpu());
+  int nthreads = MIN(128, 2 * bg3_parallel_for_ncpu());
   index_global global = {.argc = argc, .argv = argv};
   global.threads = (index_per_thread*)alloca(sizeof(index_per_thread) * nthreads);
   memset(global.threads, 0, sizeof(index_per_thread) * nthreads);
-  parallel_for_n(index_worker, &global, nthreads);
+  bg3_parallel_for_n(index_worker, &global, nthreads);
   // Phase 7: linearize the index
-  buffer entry_heap = {};
-  buffer string_heap = {};
-  buffer match_heap = {};
+  bg3_buffer entry_heap = {};
+  bg3_buffer string_heap = {};
+  bg3_buffer match_heap = {};
   for (size_t i = 0; i < global.threads[0].num_merge_entries; ++i) {
-    hash_entry* entry = global.threads[0].merge_entries + i;
-    index_entry ie = {
+    bg3_hash_entry* entry = global.threads[0].merge_entries + i;
+    bg3_index_entry ie = {
         .string_offset = (uint32_t)string_heap.size,
         .string_len = (uint32_t)strlen((char const*)entry->key),
-        .match_index = (uint32_t)(match_heap.size / sizeof(index_match_entry)),
+        .match_index = (uint32_t)(match_heap.size / sizeof(bg3_index_match_entry)),
     };
     void *symval = entry->value, *start = symval;
     do {
       index_symtab_entry* se = index_symtab_get_global(&global, symval);
-      index_match_entry me = {
+      bg3_index_match_entry me = {
           .file_idx = se->item_idx,
           .value = se->item_val,
       };
       ie.match_len++;
-      buffer_push(&match_heap, &me, sizeof(index_match_entry));
+      bg3_buffer_push(&match_heap, &me, sizeof(bg3_index_match_entry));
       symval = UNPACK_SYMVAL(se->next_idx);
     } while (symval != start);
-    buffer_push(&entry_heap, &ie, sizeof(index_entry));
-    buffer_push(&string_heap, entry->key, ie.string_len);
+    bg3_buffer_push(&entry_heap, &ie, sizeof(bg3_index_entry));
+    bg3_buffer_push(&string_heap, entry->key, ie.string_len);
   }
-  size_t mapped_size = sizeof(index_header) + global.num_paks * sizeof(index_pak_entry) +
-                       global.num_items * sizeof(index_file_entry) + entry_heap.size +
+  size_t mapped_size = sizeof(bg3_index_header) +
+                       global.num_paks * sizeof(bg3_index_pak_entry) +
+                       global.num_items * sizeof(bg3_index_file_entry) + entry_heap.size +
                        string_heap.size + match_heap.size;
   // Phase 8: write output file
-  mapped_file output;
-  if (mapped_file_init_rw_trunc(&output, argv[argc - 1], mapped_size)) {
+  bg3_mapped_file output;
+  if (bg3_mapped_file_init_rw_trunc(&output, argv[argc - 1], mapped_size)) {
     perror("mapped_file_init_rw_trunc");
     return bg3_error_failed;
   }
-  index_header* header = (index_header*)output.data;
+  bg3_index_header* header = (bg3_index_header*)output.data;
   header->magic = INDEX_MAGIC;
   header->version = INDEX_VERSION;
   header->num_paks = global.num_paks;
   header->num_files = global.num_items;
-  header->num_entries = entry_heap.size / sizeof(index_entry);
-  header->num_matches = match_heap.size / sizeof(index_match_entry);
+  header->num_entries = entry_heap.size / sizeof(bg3_index_entry);
+  header->num_matches = match_heap.size / sizeof(bg3_index_match_entry);
   header->strings_len = string_heap.size;
-  index_pak_entry* paks = (index_pak_entry*)(header + 1);
+  bg3_index_pak_entry* paks = (bg3_index_pak_entry*)(header + 1);
   for (uint32_t i = 0; i < header->num_paks; ++i) {
     snprintf(paks[i].name, sizeof(paks[i].name), "%s", global.paks[i].name);
   }
-  index_file_entry* files = (index_file_entry*)(paks + header->num_paks);
+  bg3_index_file_entry* files = (bg3_index_file_entry*)(paks + header->num_paks);
   for (uint32_t i = 0; i < header->num_files; ++i) {
     files[i].pak_idx = global.items[i].pak_idx;
     snprintf(files[i].name, sizeof(files[i].name), "%s", global.items[i].entry->name);
   }
-  index_entry* entries = (index_entry*)(files + header->num_files);
+  bg3_index_entry* entries = (bg3_index_entry*)(files + header->num_files);
   memcpy(entries, entry_heap.data, entry_heap.size);
-  index_match_entry* matches = (index_match_entry*)(entries + header->num_entries);
+  bg3_index_match_entry* matches =
+      (bg3_index_match_entry*)(entries + header->num_entries);
   memcpy(matches, match_heap.data, match_heap.size);
   char* strings = (char*)(matches + header->num_matches);
   memcpy(strings, string_heap.data, string_heap.size);
-  mapped_file_destroy(&output);
+  bg3_mapped_file_destroy(&output);
   return bg3_error_failed;
 }
 
-bg3_status index_reader_init(index_reader* reader, char* data, size_t data_len) {
-  memset(reader, 0, sizeof(index_reader));
-  if (data_len < sizeof(index_header)) {
+bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t data_len) {
+  memset(reader, 0, sizeof(bg3_index_reader));
+  if (data_len < sizeof(bg3_index_header)) {
     return bg3_error_bad_magic;
   }
-  memcpy(&reader->header, data, sizeof(index_header));
+  memcpy(&reader->header, data, sizeof(bg3_index_header));
   if (reader->header.magic != INDEX_MAGIC) {
     return bg3_error_bad_magic;
   }
   if (reader->header.version != INDEX_VERSION) {
     return bg3_error_bad_version;
   }
-  reader->paks = (index_pak_entry*)(data + sizeof(index_header));
-  reader->files = (index_file_entry*)(reader->paks + reader->header.num_paks);
-  reader->entries = (index_entry*)(reader->files + reader->header.num_files);
-  reader->matches = (index_match_entry*)(reader->entries + reader->header.num_entries);
+  reader->paks = (bg3_index_pak_entry*)(data + sizeof(bg3_index_header));
+  reader->files = (bg3_index_file_entry*)(reader->paks + reader->header.num_paks);
+  reader->entries = (bg3_index_entry*)(reader->files + reader->header.num_files);
+  reader->matches =
+      (bg3_index_match_entry*)(reader->entries + reader->header.num_entries);
   reader->strings = (char*)(reader->matches + reader->header.num_matches);
   return bg3_success;
 }
 
-void index_reader_destroy(index_reader* reader) {
+void bg3_index_reader_destroy(bg3_index_reader* reader) {
   // do we need this? lol
 }
 
-index_entry* index_reader_find_entry(index_reader* reader, uint32_t string_idx) {
+bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
+                                             uint32_t string_idx) {
   if (!reader->header.num_entries) {
     return 0;
   }
   uint32_t lo = 0, hi = reader->header.num_entries - 1;
   while (lo <= hi) {
     uint32_t mid = lo + ((hi - lo) / 2);
-    index_entry* entry = reader->entries + mid;
+    bg3_index_entry* entry = reader->entries + mid;
     uint32_t upper_bound = entry->string_offset + entry->string_len - 1;
     uint32_t lower_bound = entry->string_offset;
     if (string_idx > upper_bound) {
@@ -4862,15 +4904,15 @@ index_entry* index_reader_find_entry(index_reader* reader, uint32_t string_idx) 
 }
 
 typedef struct index_search_thread {
-  arena tmp;
-  index_reader* reader;
+  bg3_arena tmp;
+  bg3_index_reader* reader;
   char const* needle;
   size_t num_entries;
   size_t cap_entries;
-  index_entry** entries;
+  bg3_index_entry** entries;
 } index_search_thread;
 
-int do_find_worker(parallel_for_thread* tcb) {
+int do_find_worker(bg3_parallel_for_thread* tcb) {
   index_search_thread* local = ((index_search_thread*)tcb->user_data) + tcb->thread_num;
   char const* needle = local->needle;
   int nlen = strlen(local->needle);
@@ -4894,7 +4936,7 @@ int do_find_worker(parallel_for_thread* tcb) {
     for (j = nlen - 1, i = k; j >= 0 && needle[j] == haystack[i]; --j, --i)
       ;
     if (j == -1) {
-      index_entry* entry = index_reader_find_entry(local->reader, offset + i + 1);
+      bg3_index_entry* entry = bg3_index_reader_find_entry(local->reader, offset + i + 1);
       assert(entry);
       if (offset + i + 1 <= entry->string_offset + entry->string_len) {
         array_push(&local->tmp, local, entries, entry);
@@ -4912,17 +4954,17 @@ bg3_status do_find(int argc, char const** argv) {
     fprintf(stderr, "syntax: %s <index file> <search string>\n", argv[0]);
     return bg3_error_failed;
   }
-  mapped_file mapped;
-  if (mapped_file_init_ro(&mapped, argv[1])) {
+  bg3_mapped_file mapped;
+  if (bg3_mapped_file_init_ro(&mapped, argv[1])) {
     perror("mapped_file_init_ro");
     return bg3_error_libc;
   }
-  index_reader reader;
-  if (index_reader_init(&reader, mapped.data, mapped.data_len)) {
+  bg3_index_reader reader;
+  if (bg3_index_reader_init(&reader, mapped.data, mapped.data_len)) {
     fprintf(stderr, "woopsie\n");
     return bg3_error_failed;
   }
-  int nthreads = parallel_for_ncpu();
+  int nthreads = bg3_parallel_for_ncpu();
   index_search_thread* threads =
       (index_search_thread*)alloca(nthreads * sizeof(index_search_thread));
   memset(threads, 0, sizeof(index_search_thread) * nthreads);
@@ -4931,17 +4973,17 @@ bg3_status do_find(int argc, char const** argv) {
     *p = tolower(*p);
   }
   for (int i = 0; i < nthreads; ++i) {
-    arena_init(&threads[i].tmp, 1024 * 1024, 1024);
+    bg3_arena_init(&threads[i].tmp, 1024 * 1024, 1024);
     threads[i].needle = term;
     threads[i].reader = &reader;
   }
-  parallel_for(do_find_worker, threads);
+  bg3_parallel_for(do_find_worker, threads);
   size_t num_entries = 0;
   for (int i = 0; i < nthreads; ++i) {
     for (size_t j = 0; j < threads[i].num_entries; ++j) {
-      index_entry* entry = threads[i].entries[j];
+      bg3_index_entry* entry = threads[i].entries[j];
       for (uint32_t k = 0; k < entry->match_len; ++k) {
-        index_match_entry* match = reader.matches + k + entry->match_index;
+        bg3_index_match_entry* match = reader.matches + k + entry->match_index;
         printf("%s\n", reader.files[match->file_idx].name);
       }
     }
@@ -4949,17 +4991,17 @@ bg3_status do_find(int argc, char const** argv) {
   }
   printf("%zd matches\n", num_entries);
   for (int i = 0; i < nthreads; ++i) {
-    arena_destroy(&threads[i].tmp);
+    bg3_arena_destroy(&threads[i].tmp);
   }
   free(term);
-  index_reader_destroy(&reader);
-  mapped_file_destroy(&mapped);
+  bg3_index_reader_destroy(&reader);
+  bg3_mapped_file_destroy(&mapped);
   return bg3_success;
 }
 
-static uint32_t aigrid_uuid_hash(uuid* id) {
+static uint32_t aigrid_uuid_hash(bg3_uuid* id) {
   union {
-    uuid id;
+    bg3_uuid id;
     struct {
       uint64_t lo;
       uint64_t hi;
@@ -4971,37 +5013,38 @@ static uint32_t aigrid_uuid_hash(uuid* id) {
   return xor32;
 }
 
-bg3_status aigrid_file_init(aigrid_file* file, char* data, size_t data_len) {
-  aigrid_file_init_new(file);
-  cursor_init(&file->c, data, data_len);
-  if (data_len < sizeof(aigrid_header)) {
+bg3_status bg3_aigrid_file_init(bg3_aigrid_file* file, char* data, size_t data_len) {
+  bg3_aigrid_file_init_new(file);
+  bg3_cursor_init(&file->c, data, data_len);
+  if (data_len < sizeof(bg3_aigrid_header)) {
     return bg3_error_bad_version;
   }
-  cursor_read(&file->c, &file->header, sizeof(aigrid_header));
+  bg3_cursor_read(&file->c, &file->header, sizeof(bg3_aigrid_header));
   if (file->header.version != AIGRID_VERSION) {
     return bg3_error_bad_version;
   }
-  cursor_read(&file->c, file->file_uuid, UUID_STRING_LEN);
-  cursor_read(&file->c, &file->num_subgrids, sizeof(uint32_t));
+  bg3_cursor_read(&file->c, file->file_uuid, UUID_STRING_LEN);
+  bg3_cursor_read(&file->c, &file->num_subgrids, sizeof(uint32_t));
   file->cap_subgrids = file->num_subgrids;
-  file->subgrids = (aigrid_subgrid*)arena_calloc(&file->alloc, file->num_subgrids,
-                                                 sizeof(aigrid_subgrid));
+  file->subgrids = (bg3_aigrid_subgrid*)bg3_arena_calloc(&file->alloc, file->num_subgrids,
+                                                         sizeof(bg3_aigrid_subgrid));
   for (uint32_t i = 0; i < file->num_subgrids; ++i) {
-    aigrid_subgrid* subgrid = file->subgrids + i;
-    cursor_read(&file->c, &subgrid->header, sizeof(aigrid_subgrid_header));
-    cursor_read(&file->c, subgrid->object_uuid, UUID_STRING_LEN);
-    cursor_read(&file->c, subgrid->template_uuid, UUID_STRING_LEN);
+    bg3_aigrid_subgrid* subgrid = file->subgrids + i;
+    bg3_cursor_read(&file->c, &subgrid->header, sizeof(bg3_aigrid_subgrid_header));
+    bg3_cursor_read(&file->c, subgrid->object_uuid, UUID_STRING_LEN);
+    bg3_cursor_read(&file->c, subgrid->template_uuid, UUID_STRING_LEN);
     uint32_t uncompressed_len, compressed_len;
-    cursor_read(&file->c, &uncompressed_len, sizeof(uncompressed_len));
-    cursor_read(&file->c, &compressed_len, sizeof(compressed_len));
+    bg3_cursor_read(&file->c, &uncompressed_len, sizeof(uncompressed_len));
+    bg3_cursor_read(&file->c, &compressed_len, sizeof(compressed_len));
     unsigned long src_len = compressed_len, need_len = uncompressed_len;
     uint8_t* inflate_tmp = (uint8_t*)malloc(uncompressed_len);
     uint8_t* compressed_data = (uint8_t*)file->c.ptr;
-    cursor_read(&file->c, 0, compressed_len);
+    bg3_cursor_read(&file->c, 0, compressed_len);
     if (mz_uncompress2(inflate_tmp, &need_len, compressed_data, &src_len) == MZ_OK) {
       int lz4_uncompressed_len =
-          subgrid->header.width * subgrid->header.height * sizeof(aigrid_tile);
-      subgrid->tiles = (aigrid_tile*)arena_alloc(&file->alloc, lz4_uncompressed_len);
+          subgrid->header.width * subgrid->header.height * sizeof(bg3_aigrid_tile);
+      subgrid->tiles =
+          (bg3_aigrid_tile*)bg3_arena_alloc(&file->alloc, lz4_uncompressed_len);
       int status = LZ4_decompress_safe((char*)inflate_tmp, (char*)subgrid->tiles,
                                        uncompressed_len, lz4_uncompressed_len);
       if (status <= 0) {
@@ -5011,21 +5054,21 @@ bg3_status aigrid_file_init(aigrid_file* file, char* data, size_t data_len) {
     }
     free(inflate_tmp);
   }
-  cursor_read(&file->c, &file->num_layers, sizeof(uint32_t));
+  bg3_cursor_read(&file->c, &file->num_layers, sizeof(uint32_t));
   file->cap_layers = file->num_layers;
-  file->layers =
-      (aigrid_layer*)arena_calloc(&file->alloc, file->num_layers, sizeof(aigrid_layer));
+  file->layers = (bg3_aigrid_layer*)bg3_arena_calloc(&file->alloc, file->num_layers,
+                                                     sizeof(bg3_aigrid_layer));
   for (uint32_t i = 0; i < file->num_layers; ++i) {
-    aigrid_layer* layer = file->layers + i;
-    cursor_read(&file->c, &layer->level_template, sizeof(uuid));
-    cursor_read(&file->c, &layer->num_entries, sizeof(uint32_t));
+    bg3_aigrid_layer* layer = file->layers + i;
+    bg3_cursor_read(&file->c, &layer->level_template, sizeof(bg3_uuid));
+    bg3_cursor_read(&file->c, &layer->num_entries, sizeof(uint32_t));
     layer->cap_entries = layer->num_entries;
-    layer->entries = (aigrid_layer_entry*)arena_calloc(&file->alloc, layer->num_entries,
-                                                       sizeof(aigrid_layer));
+    layer->entries = (bg3_aigrid_layer_entry*)bg3_arena_calloc(
+        &file->alloc, layer->num_entries, sizeof(bg3_aigrid_layer));
     char tmpbuf[48];
     uuid_to_string(&layer->level_template, tmpbuf);
-    cursor_read(&file->c, layer->entries,
-                layer->num_entries * sizeof(aigrid_layer_entry));
+    bg3_cursor_read(&file->c, layer->entries,
+                    layer->num_entries * sizeof(bg3_aigrid_layer_entry));
   }
   assert(file->c.ptr == file->c.end);
   return bg3_success;
@@ -5035,24 +5078,24 @@ static inline int16_t quantize_float_int16(float float_val) {
   return (int16_t)(float_val * 100.0f * 0.5f + 0.5f);
 }
 
-void aigrid_file_destroy(aigrid_file* file) {
-  arena_destroy(&file->alloc);
+void bg3_aigrid_file_destroy(bg3_aigrid_file* file) {
+  bg3_arena_destroy(&file->alloc);
 }
 
-void aigrid_file_init_new(aigrid_file* file) {
-  memset(file, 0, sizeof(aigrid_file));
+void bg3_aigrid_file_init_new(bg3_aigrid_file* file) {
+  memset(file, 0, sizeof(bg3_aigrid_file));
   file->header.version = AIGRID_VERSION;
-  arena_init(&file->alloc, 1024 * 1024, 1024);
+  bg3_arena_init(&file->alloc, 1024 * 1024, 1024);
 }
 
-aigrid_subgrid* aigrid_file_create_subgrid(aigrid_file* file,
-                                           uint32_t width,
-                                           uint32_t height,
-                                           uuid* object_uuid,
-                                           uuid* template_uuid,
-                                           int16_t tile_x,
-                                           int16_t tile_y,
-                                           vec3 world_pos) {
+bg3_aigrid_subgrid* bg3_aigrid_file_create_subgrid(bg3_aigrid_file* file,
+                                                   uint32_t width,
+                                                   uint32_t height,
+                                                   bg3_uuid* object_uuid,
+                                                   bg3_uuid* template_uuid,
+                                                   int16_t tile_x,
+                                                   int16_t tile_y,
+                                                   bg3_vec3 world_pos) {
   union {
     struct {
       int16_t x, y;
@@ -5061,7 +5104,7 @@ aigrid_subgrid* aigrid_file_create_subgrid(aigrid_file* file,
   } subgrid_id_offset;
   subgrid_id_offset.x = tile_x;
   subgrid_id_offset.y = tile_y;
-  aigrid_subgrid sg = {
+  bg3_aigrid_subgrid sg = {
       .header =
           {
               .subgrid_id = aigrid_uuid_hash(object_uuid) + subgrid_id_offset.uval,
@@ -5071,8 +5114,8 @@ aigrid_subgrid* aigrid_file_create_subgrid(aigrid_file* file,
               .y = world_pos[1],
               .z = roundf(world_pos[2] * 2.f) * 0.5f,
           },
-      .tiles =
-          (aigrid_tile*)arena_calloc(&file->alloc, width * height, sizeof(aigrid_tile)),
+      .tiles = (bg3_aigrid_tile*)bg3_arena_calloc(&file->alloc, width * height,
+                                                  sizeof(bg3_aigrid_tile)),
   };
   char tmpbuf[48];
   uuid_to_string(object_uuid, tmpbuf);
@@ -5083,18 +5126,19 @@ aigrid_subgrid* aigrid_file_create_subgrid(aigrid_file* file,
   return &file->subgrids[file->num_subgrids - 1];
 }
 
-bg3_status aigrid_file_write(aigrid_file* file, char const* path) {
+bg3_status bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path) {
   bg3_status status = bg3_success;
-  buffer out = {};
-  buffer_push(&out, &file->header, sizeof(aigrid_header));
-  buffer_push(&out, file->file_uuid, UUID_STRING_LEN);
-  buffer_push(&out, &file->num_subgrids, sizeof(uint32_t));
+  bg3_buffer out = {};
+  bg3_buffer_push(&out, &file->header, sizeof(bg3_aigrid_header));
+  bg3_buffer_push(&out, file->file_uuid, UUID_STRING_LEN);
+  bg3_buffer_push(&out, &file->num_subgrids, sizeof(uint32_t));
   for (uint32_t i = 0; i < file->num_subgrids; ++i) {
-    aigrid_subgrid* subgrid = file->subgrids + i;
-    buffer_push(&out, &subgrid->header, sizeof(aigrid_subgrid_header));
-    buffer_push(&out, subgrid->object_uuid, UUID_STRING_LEN);
-    buffer_push(&out, subgrid->template_uuid, UUID_STRING_LEN);
-    int src_size = sizeof(aigrid_tile) * subgrid->header.width * subgrid->header.height;
+    bg3_aigrid_subgrid* subgrid = file->subgrids + i;
+    bg3_buffer_push(&out, &subgrid->header, sizeof(bg3_aigrid_subgrid_header));
+    bg3_buffer_push(&out, subgrid->object_uuid, UUID_STRING_LEN);
+    bg3_buffer_push(&out, subgrid->template_uuid, UUID_STRING_LEN);
+    int src_size =
+        sizeof(bg3_aigrid_tile) * subgrid->header.width * subgrid->header.height;
     int lz4_bound = LZ4_compressBound(src_size);
     char* lz4_compress_buf = (char*)malloc(lz4_bound);
     int lz4_result = LZ4_compress_default((char*)subgrid->tiles, lz4_compress_buf,
@@ -5114,46 +5158,48 @@ bg3_status aigrid_file_write(aigrid_file* file, char const* path) {
       status = bg3_error_failed;
       goto out_free_buf;
     }
-    buffer_push(&out, &lz4_result, sizeof(uint32_t));
-    buffer_push(&out, &deflate_len, sizeof(uint32_t));
-    buffer_push(&out, deflate_compress_buf, deflate_len);
+    bg3_buffer_push(&out, &lz4_result, sizeof(uint32_t));
+    bg3_buffer_push(&out, &deflate_len, sizeof(uint32_t));
+    bg3_buffer_push(&out, deflate_compress_buf, deflate_len);
     free(deflate_compress_buf);
   }
-  buffer_push(&out, &file->num_layers, sizeof(uint32_t));
+  bg3_buffer_push(&out, &file->num_layers, sizeof(uint32_t));
   for (uint32_t i = 0; i < file->num_layers; ++i) {
-    aigrid_layer* layer = file->layers + i;
-    buffer_push(&out, &layer->level_template, sizeof(uuid));
-    buffer_push(&out, &layer->num_entries, sizeof(uint32_t));
-    buffer_push(&out, layer->entries, sizeof(aigrid_layer_entry) * layer->num_entries);
+    bg3_aigrid_layer* layer = file->layers + i;
+    bg3_buffer_push(&out, &layer->level_template, sizeof(bg3_uuid));
+    bg3_buffer_push(&out, &layer->num_entries, sizeof(uint32_t));
+    bg3_buffer_push(&out, layer->entries,
+                    sizeof(bg3_aigrid_layer_entry) * layer->num_entries);
   }
-  mapped_file mapped;
-  if ((status = mapped_file_init_rw_trunc(&mapped, path, out.size))) {
+  bg3_mapped_file mapped;
+  if ((status = bg3_mapped_file_init_rw_trunc(&mapped, path, out.size))) {
     goto out_free_buf;
   }
   memcpy(mapped.data, out.data, out.size);
-  mapped_file_destroy(&mapped);
+  bg3_mapped_file_destroy(&mapped);
 out_free_buf:
-  buffer_destroy(&out);
+  bg3_buffer_destroy(&out);
   return status;
 }
 
-void aigrid_file_cook_patch(aigrid_file* file,
-                            uuid* object_uuid,
-                            vec3 world_pos,
-                            patch_file* patch) {
+void bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
+                                bg3_uuid* object_uuid,
+                                bg3_vec3 world_pos,
+                                bg3_patch_file* patch) {
   float minval = INFINITY;
   for (size_t i = 0; i < patch->metadata.local_cols * patch->metadata.local_rows; ++i) {
     minval = fminf(minval, patch->heightfield[i]);
   }
-  uuid zero_uuid = {};
-  vec3 base_pos = {world_pos[0] + patch->metadata.chunk_x * 64.0f, world_pos[1] + minval,
-                   world_pos[2] + patch->metadata.chunk_y * 64.0f};
-  aigrid_subgrid* subgrid = aigrid_file_create_subgrid(
+  bg3_uuid zero_uuid = {};
+  bg3_vec3 base_pos = {world_pos[0] + patch->metadata.chunk_x * 64.0f,
+                       world_pos[1] + minval,
+                       world_pos[2] + patch->metadata.chunk_y * 64.0f};
+  bg3_aigrid_subgrid* subgrid = bg3_aigrid_file_create_subgrid(
       file, patch->metadata.tex_cols * 2, patch->metadata.tex_rows * 2, object_uuid,
       &zero_uuid, patch->metadata.chunk_x, patch->metadata.chunk_y, base_pos);
   for (uint32_t y = 0; y < subgrid->header.height; ++y) {
     for (uint32_t x = 0; x < subgrid->header.width; ++x) {
-      aigrid_tile* tile = &subgrid->tiles[y * subgrid->header.width + x];
+      bg3_aigrid_tile* tile = &subgrid->tiles[y * subgrid->header.width + x];
       int patch_y0 = y / 2, patch_y1 = patch_y0 + 1;
       int patch_x0 = x / 2, patch_x1 = patch_x0 + 1;
       float offset_y = (y % 2 + 1) * 0.25f;
@@ -5180,18 +5226,18 @@ void aigrid_file_cook_patch(aigrid_file* file,
   }
 }
 
-void aigrid_file_dump(aigrid_file* file) {
+void aigrid_file_dump(bg3_aigrid_file* file) {
   printf("aigrid version %d with %d subgrids and %d layers\n", file->header.version,
          file->num_subgrids, file->num_layers);
   for (uint32_t i = 0; i < file->num_subgrids; ++i) {
-    aigrid_subgrid* subgrid = file->subgrids + i;
+    bg3_aigrid_subgrid* subgrid = file->subgrids + i;
     printf("subgrid %08X uuid %s template %s tiles (%dx%d) world_pos (%f,%f,%f)\n",
            subgrid->header.subgrid_id, subgrid->object_uuid, subgrid->template_uuid,
            subgrid->header.width, subgrid->header.height, subgrid->header.x,
            subgrid->header.y, subgrid->header.z);
     for (uint32_t y = 0; y < subgrid->header.height; ++y) {
       for (uint32_t x = 0; x < subgrid->header.width; ++x) {
-        aigrid_tile* tile = &subgrid->tiles[y * subgrid->header.width + x];
+        bg3_aigrid_tile* tile = &subgrid->tiles[y * subgrid->header.width + x];
         printf("(%03d,%03d) %016" PRIX64 " %6.2f %6.2f %5d %5d | ", x, y, tile->state,
                ((float)tile->height) / 50.f, ((float)tile->bottom) / 50.f,
                tile->metadata_idx, tile->surface);
@@ -5200,12 +5246,12 @@ void aigrid_file_dump(aigrid_file* file) {
     }
   }
   for (uint32_t i = 0; i < file->num_layers; ++i) {
-    aigrid_layer* layer = file->layers + i;
+    bg3_aigrid_layer* layer = file->layers + i;
     char tmpbuf[48];
     uuid_to_string(&layer->level_template, tmpbuf);
     printf("layer %s num_entries %d\n", tmpbuf, layer->num_entries);
     for (uint32_t j = 0; j < layer->num_entries; ++j) {
-      aigrid_layer_entry* entry = layer->entries + j;
+      bg3_aigrid_layer_entry* entry = layer->entries + j;
       printf("%5d %5d %08X %016" PRIX64 " %10f %08X\n", entry->x, entry->y,
              entry->subgrid_id, entry->state, entry->height, entry->unused);
     }
@@ -5214,33 +5260,33 @@ void aigrid_file_dump(aigrid_file* file) {
 
 /// Osiris Implementation
 
-static inline void osiris_save_get_u8(osiris_save* save, uint8_t* out) {
-  cursor_read(&save->c, out, 1);
+static inline void osiris_save_get_u8(bg3_osiris_save* save, uint8_t* out) {
+  bg3_cursor_read(&save->c, out, 1);
 }
 
-static inline void osiris_save_get_i8(osiris_save* save, int8_t* out) {
-  cursor_read(&save->c, out, 1);
+static inline void osiris_save_get_i8(bg3_osiris_save* save, int8_t* out) {
+  bg3_cursor_read(&save->c, out, 1);
 }
 
-static inline void osiris_save_get_u16(osiris_save* save, uint16_t* out) {
-  cursor_read(&save->c, out, 2);
+static inline void osiris_save_get_u16(bg3_osiris_save* save, uint16_t* out) {
+  bg3_cursor_read(&save->c, out, 2);
 }
 
-static inline void osiris_save_get_u32(osiris_save* save, uint32_t* out) {
-  cursor_read(&save->c, out, 4);
+static inline void osiris_save_get_u32(bg3_osiris_save* save, uint32_t* out) {
+  bg3_cursor_read(&save->c, out, 4);
 }
 
-static inline void osiris_save_get_u64(osiris_save* save, uint64_t* out) {
-  cursor_read(&save->c, out, 8);
+static inline void osiris_save_get_u64(bg3_osiris_save* save, uint64_t* out) {
+  bg3_cursor_read(&save->c, out, 8);
 }
 
-static void osiris_save_get_string(osiris_save* save, buffer* out) {
+static void osiris_save_get_string(bg3_osiris_save* save, bg3_buffer* out) {
   out->size = 0;
   while (save->c.ptr < save->c.end) {
     uint8_t c = *save->c.ptr ^ save->string_mask;
     save->c.ptr++;
     // put the nul in the buffer for ez c compat
-    buffer_putchar(out, c);
+    bg3_buffer_putchar(out, c);
     if (!c) {
       out->size--;
       break;
@@ -5248,48 +5294,50 @@ static void osiris_save_get_string(osiris_save* save, buffer* out) {
   }
 }
 
-void osiris_save_destroy(osiris_save* save) {
-  arena_destroy(&save->alloc);
-  buffer_destroy(&save->out);
-  ibuf_destroy(&save->text_out);
+void bg3_osiris_save_destroy(bg3_osiris_save* save) {
+  bg3_arena_destroy(&save->alloc);
+  bg3_buffer_destroy(&save->out);
+  bg3_ibuf_destroy(&save->text_out);
 }
 
 static int osiris_type_info_compare(void const* lhs, void const* rhs) {
-  osiris_type_info* til = (osiris_type_info*)lhs;
-  osiris_type_info* tir = (osiris_type_info*)rhs;
+  bg3_osiris_type_info* til = (bg3_osiris_type_info*)lhs;
+  bg3_osiris_type_info* tir = (bg3_osiris_type_info*)rhs;
   return (int)til->index - (int)tir->index;
 }
 
 static int osiris_enum_info_compare(void const* lhs, void const* rhs) {
-  osiris_enum_info* til = (osiris_enum_info*)lhs;
-  osiris_enum_info* tir = (osiris_enum_info*)rhs;
+  bg3_osiris_enum_info* til = (bg3_osiris_enum_info*)lhs;
+  bg3_osiris_enum_info* tir = (bg3_osiris_enum_info*)rhs;
   return (int)til->index - (int)tir->index;
 }
 
 static int osiris_enum_entry_compare(void const* lhs, void const* rhs) {
-  osiris_enum_entry* til = (osiris_enum_entry*)lhs;
-  osiris_enum_entry* tir = (osiris_enum_entry*)rhs;
+  bg3_osiris_enum_entry* til = (bg3_osiris_enum_entry*)lhs;
+  bg3_osiris_enum_entry* tir = (bg3_osiris_enum_entry*)rhs;
   return (int64_t)til->value - (int64_t)tir->value;
 }
 
-static void osiris_save_debug_(osiris_save* save, char const* function, int line) {
+static void osiris_save_debug_(bg3_osiris_save* save, char const* function, int line) {
   printf("%s:%d %08X\n", function, line,
          (int)(intptr_t)save->c.ptr - (int)(intptr_t)save->c.start);
-  hex_dump(save->c.ptr, 0x80);
+  bg3_hex_dump(save->c.ptr, 0x80);
   bg3_panic("osiris save corrupted");
 }
 
 #define osiris_save_debug(save) osiris_save_debug_(save, __FUNCTION__, __LINE__)
 
-static void osiris_save_get_value(osiris_save* save, buffer* tmp, osiris_variant* out) {
+static void osiris_save_get_value(bg3_osiris_save* save,
+                                  bg3_buffer* tmp,
+                                  bg3_osiris_variant* out) {
   uint8_t encoding;
-  cursor_read(&save->c, &encoding, 1);
+  bg3_cursor_read(&save->c, &encoding, 1);
   if (encoding == 'e') {
     uint16_t index;
     osiris_save_get_u16(save, &index);
-    *out = (osiris_variant){.type = osiris_prim_type_enum, .index = index};
+    *out = (bg3_osiris_variant){.type = bg3_osiris_prim_type_enum, .index = index};
     osiris_save_get_string(save, tmp);
-    out->string = arena_strdup(&save->alloc, tmp->data);
+    out->string = bg3_arena_strdup(&save->alloc, tmp->data);
   } else if (encoding == '1') {
 #if 0
         uint16_t unk1;
@@ -5302,35 +5350,35 @@ static void osiris_save_get_value(osiris_save* save, buffer* tmp, osiris_variant
     osiris_save_debug(save);
   } else if (encoding == '0') {
     uint16_t type_idx;
-    cursor_read(&save->c, &type_idx, sizeof(uint16_t));
+    bg3_cursor_read(&save->c, &type_idx, sizeof(uint16_t));
     if (!type_idx) {
-      *out = (osiris_variant){.type = osiris_prim_type_undef, .index = type_idx};
+      *out = (bg3_osiris_variant){.type = bg3_osiris_prim_type_undef, .index = type_idx};
       return;
     }
-    osiris_type_info* value_type = &save->type_infos[type_idx - 1];
+    bg3_osiris_type_info* value_type = &save->type_infos[type_idx - 1];
     while (value_type->alias_index) {
       value_type = &save->type_infos[value_type->alias_index - 1];
     }
-    *out =
-        (osiris_variant){.type = (osiris_prim_type)value_type->index, .index = type_idx};
+    *out = (bg3_osiris_variant){.type = (bg3_osiris_prim_type)value_type->index,
+                                .index = type_idx};
     switch (value_type->index) {
-      case osiris_prim_type_integer:
+      case bg3_osiris_prim_type_integer:
         osiris_save_get_u32(save, (uint32_t*)&out->integer);
         break;
-      case osiris_prim_type_integer64:
+      case bg3_osiris_prim_type_integer64:
         osiris_save_get_u64(save, (uint64_t*)&out->integer64);
         break;
-      case osiris_prim_type_real:
+      case bg3_osiris_prim_type_real:
         // punned through union
         osiris_save_get_u32(save, (uint32_t*)&out->integer);
         break;
-      case osiris_prim_type_string:
-      case osiris_prim_type_guidstring: {
+      case bg3_osiris_prim_type_string:
+      case bg3_osiris_prim_type_guidstring: {
         uint8_t is_set;
-        cursor_read(&save->c, &is_set, 1);
+        bg3_cursor_read(&save->c, &is_set, 1);
         if (is_set) {
           osiris_save_get_string(save, tmp);
-          out->string = arena_strdup(&save->alloc, tmp->data);
+          out->string = bg3_arena_strdup(&save->alloc, tmp->data);
         }
         break;
       }
@@ -5342,23 +5390,25 @@ static void osiris_save_get_value(osiris_save* save, buffer* tmp, osiris_variant
   }
 }
 
-static void osiris_save_get_binding0(osiris_save* save,
-                                     buffer* tmp,
-                                     osiris_binding* out) {
+static void osiris_save_get_binding0(bg3_osiris_save* save,
+                                     bg3_buffer* tmp,
+                                     bg3_osiris_binding* out) {
   osiris_save_get_value(save, tmp, &out->value);
   osiris_save_get_u8(save, &out->is_grounded);
   osiris_save_get_u8(save, &out->unused0);
   osiris_save_get_u8(save, &out->is_variable_again);
 }
 
-static void osiris_save_get_binding1(osiris_save* save, osiris_binding* out) {
+static void osiris_save_get_binding1(bg3_osiris_save* save, bg3_osiris_binding* out) {
   osiris_save_get_u8(save, &out->index);
   osiris_save_get_u8(save, &out->is_dead);
   osiris_save_get_u8(save, &out->is_live);
 }
 
-static void osiris_save_get_binding(osiris_save* save, buffer* tmp, osiris_binding* out) {
-  cursor_read(&save->c, &out->is_variable, 1);
+static void osiris_save_get_binding(bg3_osiris_save* save,
+                                    bg3_buffer* tmp,
+                                    bg3_osiris_binding* out) {
+  bg3_cursor_read(&save->c, &out->is_variable, 1);
   if (out->is_variable > 1) {
     osiris_save_debug(save);
   }
@@ -5368,15 +5418,15 @@ static void osiris_save_get_binding(osiris_save* save, buffer* tmp, osiris_bindi
   }
 }
 
-static void osiris_save_get_action_list(osiris_save* save,
-                                        buffer* tmp,
+static void osiris_save_get_action_list(bg3_osiris_save* save,
+                                        bg3_buffer* tmp,
                                         uint32_t* num_actions,
-                                        osiris_action** actions) {
-  cursor_read(&save->c, num_actions, sizeof(uint32_t));
-  *actions =
-      (osiris_action*)arena_calloc(&save->alloc, *num_actions, sizeof(osiris_action));
+                                        bg3_osiris_action** actions) {
+  bg3_cursor_read(&save->c, num_actions, sizeof(uint32_t));
+  *actions = (bg3_osiris_action*)bg3_arena_calloc(&save->alloc, *num_actions,
+                                                  sizeof(bg3_osiris_action));
   for (uint32_t j = 0; j < *num_actions; ++j) {
-    osiris_action* a = *actions + j;
+    bg3_osiris_action* a = *actions + j;
     osiris_save_get_string(save, tmp);
     if (*tmp->data) {
       a->function = strdup(tmp->data);
@@ -5384,29 +5434,29 @@ static void osiris_save_get_action_list(osiris_save* save,
       osiris_save_get_u8(save, &has_arguments);
       if (has_arguments) {
         osiris_save_get_u8(save, &a->num_arguments);
-        a->arguments = (osiris_binding*)arena_calloc(&save->alloc, a->num_arguments,
-                                                     sizeof(osiris_binding));
+        a->arguments = (bg3_osiris_binding*)bg3_arena_calloc(
+            &save->alloc, a->num_arguments, sizeof(bg3_osiris_binding));
         for (uint8_t k = 0; k < a->num_arguments; ++k) {
-          osiris_binding* b = a->arguments + k;
+          bg3_osiris_binding* b = a->arguments + k;
           osiris_save_get_binding(save, tmp, b);
         }
       }
       osiris_save_get_u8(save, &a->retract);
     }
-    cursor_read(&save->c, &a->completed_goal_id, 4);
+    bg3_cursor_read(&save->c, &a->completed_goal_id, 4);
   }
 }
 
-static void osiris_save_get_rete_node_edge(osiris_save* save,
-                                           osiris_rete_node_edge* edge) {
+static void osiris_save_get_rete_node_edge(bg3_osiris_save* save,
+                                           bg3_osiris_rete_node_edge* edge) {
   osiris_save_get_u32(save, &edge->node_id);
   osiris_save_get_u32(save, (uint32_t*)&edge->direction);
   osiris_save_get_u32(save, &edge->goal_id);
 }
 
-static void osiris_save_get_operator_common(osiris_save* save,
-                                            osiris_rete_node_edge* child,
-                                            osiris_rete_node_parent* parent) {
+static void osiris_save_get_operator_common(bg3_osiris_save* save,
+                                            bg3_osiris_rete_node_edge* child,
+                                            bg3_osiris_rete_node_parent* parent) {
   osiris_save_get_rete_node_edge(save, child);
   osiris_save_get_u32(save, &parent->node_id);
   osiris_save_get_u32(save, &parent->adaptor);
@@ -5415,81 +5465,83 @@ static void osiris_save_get_operator_common(osiris_save* save,
   osiris_save_get_i8(save, &parent->db_distance);
 }
 
-void osiris_save_init(osiris_save* save) {
-  memset(save, 0, sizeof(osiris_save));
-  arena_init(&save->alloc, 1024 * 1024, 1024);
-  buffer_init(&save->out);
-  ibuf_init(&save->text_out);
+void bg3_osiris_save_init(bg3_osiris_save* save) {
+  memset(save, 0, sizeof(bg3_osiris_save));
+  bg3_arena_init(&save->alloc, 1024 * 1024, 1024);
+  bg3_buffer_init(&save->out);
+  bg3_ibuf_init(&save->text_out);
 }
 
-bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_len) {
-  osiris_save_init(save);
-  cursor_init(&save->c, data, data_len);
+bg3_status bg3_osiris_save_init_binary(bg3_osiris_save* save,
+                                       char* data,
+                                       size_t data_len) {
+  bg3_osiris_save_init(save);
+  bg3_cursor_init(&save->c, data, data_len);
   char must_be_zero = 1;
-  cursor_read(&save->c, &must_be_zero, 1);
+  bg3_cursor_read(&save->c, &must_be_zero, 1);
   if (must_be_zero) {
-    osiris_save_destroy(save);
+    bg3_osiris_save_destroy(save);
     return bg3_error_failed;
   }
-  buffer tmp = {};
+  bg3_buffer tmp = {};
   osiris_save_get_string(save, &tmp);
-  save->version = arena_strdup(&save->alloc, tmp.data);
-  cursor_read(&save->c, &save->version_major, 1);
-  cursor_read(&save->c, &save->version_minor, 1);
+  save->version = bg3_arena_strdup(&save->alloc, tmp.data);
+  bg3_cursor_read(&save->c, &save->version_major, 1);
+  bg3_cursor_read(&save->c, &save->version_minor, 1);
   if (save->version_major != OSIRIS_VERSION_MAJOR ||
       save->version_minor != OSIRIS_VERSION_MINOR) {
-    osiris_save_destroy(save);
-    buffer_destroy(&tmp);
+    bg3_osiris_save_destroy(save);
+    bg3_buffer_destroy(&tmp);
     return bg3_error_failed;
   }
-  cursor_read(&save->c, &save->is_big_endian, 1);
+  bg3_cursor_read(&save->c, &save->is_big_endian, 1);
   if (save->is_big_endian) {
     bg3_panic("no");  // maybe if powerpc miraculously comes back
   }
-  cursor_read(&save->c, &save->unk0, 1);
-  cursor_read(&save->c, save->story_version, 0x80);
-  cursor_read(&save->c, &save->debug_flags, sizeof(uint32_t));
-  cursor_read(&save->c, &save->num_type_infos, sizeof(uint32_t));
+  bg3_cursor_read(&save->c, &save->unk0, 1);
+  bg3_cursor_read(&save->c, save->story_version, 0x80);
+  bg3_cursor_read(&save->c, &save->debug_flags, sizeof(uint32_t));
+  bg3_cursor_read(&save->c, &save->num_type_infos, sizeof(uint32_t));
   save->string_mask = OSIRIS_STRING_MASK;  // i wonder if some middlebox caused this
-  osiris_type_info* type_infos = (osiris_type_info*)arena_calloc(
-      &save->alloc, save->num_type_infos, sizeof(osiris_type_info));
+  bg3_osiris_type_info* type_infos = (bg3_osiris_type_info*)bg3_arena_calloc(
+      &save->alloc, save->num_type_infos, sizeof(bg3_osiris_type_info));
   for (uint32_t i = 0; i < save->num_type_infos; ++i) {
     osiris_save_get_string(save, &tmp);
-    type_infos[i].name = arena_strdup(&save->alloc, tmp.data);
-    cursor_read(&save->c, &type_infos[i].index, 1);
-    cursor_read(&save->c, &type_infos[i].alias_index, 1);
+    type_infos[i].name = bg3_arena_strdup(&save->alloc, tmp.data);
+    bg3_cursor_read(&save->c, &type_infos[i].index, 1);
+    bg3_cursor_read(&save->c, &type_infos[i].alias_index, 1);
   }
-  qsort(type_infos, save->num_type_infos, sizeof(osiris_type_info),
+  qsort(type_infos, save->num_type_infos, sizeof(bg3_osiris_type_info),
         osiris_type_info_compare);
   save->type_infos = type_infos;
-  cursor_read(&save->c, &save->num_enums, sizeof(uint32_t));
-  osiris_enum_info* enums = (osiris_enum_info*)arena_calloc(&save->alloc, save->num_enums,
-                                                            sizeof(osiris_enum_info));
+  bg3_cursor_read(&save->c, &save->num_enums, sizeof(uint32_t));
+  bg3_osiris_enum_info* enums = (bg3_osiris_enum_info*)bg3_arena_calloc(
+      &save->alloc, save->num_enums, sizeof(bg3_osiris_enum_info));
   for (uint32_t i = 0; i < save->num_enums; ++i) {
-    cursor_read(&save->c, &enums[i].index, sizeof(uint16_t));
-    cursor_read(&save->c, &enums[i].num_entries, sizeof(uint32_t));
-    enums[i].entries = (osiris_enum_entry*)arena_calloc(
-        &save->alloc, enums[i].num_entries, sizeof(osiris_enum_entry));
+    bg3_cursor_read(&save->c, &enums[i].index, sizeof(uint16_t));
+    bg3_cursor_read(&save->c, &enums[i].num_entries, sizeof(uint32_t));
+    enums[i].entries = (bg3_osiris_enum_entry*)bg3_arena_calloc(
+        &save->alloc, enums[i].num_entries, sizeof(bg3_osiris_enum_entry));
     for (uint32_t j = 0; j < enums[i].num_entries; ++j) {
       osiris_save_get_string(save, &tmp);
-      enums[i].entries[j].name = arena_strdup(&save->alloc, tmp.data);
-      cursor_read(&save->c, &enums[i].entries[j].value, sizeof(uint64_t));
+      enums[i].entries[j].name = bg3_arena_strdup(&save->alloc, tmp.data);
+      bg3_cursor_read(&save->c, &enums[i].entries[j].value, sizeof(uint64_t));
     }
-    qsort(enums[i].entries, enums[i].num_entries, sizeof(osiris_enum_entry),
+    qsort(enums[i].entries, enums[i].num_entries, sizeof(bg3_osiris_enum_entry),
           osiris_enum_entry_compare);
     save->type_infos[enums[i].index - 1].enum_index = i + 1;
   }
-  qsort(enums, save->num_enums, sizeof(osiris_enum_info), osiris_enum_info_compare);
+  qsort(enums, save->num_enums, sizeof(bg3_osiris_enum_info), osiris_enum_info_compare);
   save->enums = enums;
-  cursor_read(&save->c, &save->num_div_objects, sizeof(uint32_t));
+  bg3_cursor_read(&save->c, &save->num_div_objects, sizeof(uint32_t));
   if (save->num_div_objects) {
     bg3_panic("DIV object section is not supported");
   }
-  cursor_read(&save->c, &save->num_functions, sizeof(uint32_t));
-  save->functions = (osiris_function_info*)arena_calloc(&save->alloc, save->num_functions,
-                                                        sizeof(osiris_function_info));
+  bg3_cursor_read(&save->c, &save->num_functions, sizeof(uint32_t));
+  save->functions = (bg3_osiris_function_info*)bg3_arena_calloc(
+      &save->alloc, save->num_functions, sizeof(bg3_osiris_function_info));
   for (uint32_t i = 0; i < save->num_functions; ++i) {
-    osiris_function_info* fn = &save->functions[i];
+    bg3_osiris_function_info* fn = &save->functions[i];
     osiris_save_get_u32(save, &fn->line);
     osiris_save_get_u32(save, &fn->num_conds);
     osiris_save_get_u32(save, &fn->num_actions);
@@ -5500,56 +5552,56 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     osiris_save_get_u32(save, &fn->div_opcode);
     osiris_save_get_u32(save, &fn->is_external);
     osiris_save_get_string(save, &tmp);
-    fn->name = arena_strdup(&save->alloc, tmp.data);
+    fn->name = bg3_arena_strdup(&save->alloc, tmp.data);
     // the length field is always longer than the data 🤣
     uint32_t out_mask_len;
-    cursor_read(&save->c, &out_mask_len, sizeof(uint32_t));
+    bg3_cursor_read(&save->c, &out_mask_len, sizeof(uint32_t));
     if (out_mask_len > 4) {
       osiris_save_debug(save);
     }
-    cursor_read(&save->c, &fn->out_mask, out_mask_len);
-    cursor_read(&save->c, &fn->num_params, 1);
+    bg3_cursor_read(&save->c, &fn->out_mask, out_mask_len);
+    bg3_cursor_read(&save->c, &fn->num_params, 1);
     if (fn->num_params) {
       fn->params =
-          (uint16_t*)arena_calloc(&save->alloc, fn->num_params, sizeof(uint16_t));
+          (uint16_t*)bg3_arena_calloc(&save->alloc, fn->num_params, sizeof(uint16_t));
       for (uint32_t j = 0; j < fn->num_params; ++j) {
         osiris_save_get_u16(save, fn->params + j);
       }
     }
   }
-  cursor_read(&save->c, &save->num_rete_nodes, sizeof(uint32_t));
-  save->rete_nodes = (osiris_rete_node*)arena_calloc(&save->alloc, save->num_rete_nodes,
-                                                     sizeof(osiris_rete_node));
+  bg3_cursor_read(&save->c, &save->num_rete_nodes, sizeof(uint32_t));
+  save->rete_nodes = (bg3_osiris_rete_node*)bg3_arena_calloc(
+      &save->alloc, save->num_rete_nodes, sizeof(bg3_osiris_rete_node));
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
-    osiris_rete_node* n = &save->rete_nodes[i];
+    bg3_osiris_rete_node* n = &save->rete_nodes[i];
     uint8_t node_type;
-    cursor_read(&save->c, &node_type, sizeof(uint8_t));
-    n->type = (osiris_rete_node_type)node_type;
-    cursor_read(&save->c, &n->node_id, sizeof(uint32_t));
-    cursor_read(&save->c, &n->db, sizeof(uint32_t));
+    bg3_cursor_read(&save->c, &node_type, sizeof(uint8_t));
+    n->type = (bg3_osiris_rete_node_type)node_type;
+    bg3_cursor_read(&save->c, &n->node_id, sizeof(uint32_t));
+    bg3_cursor_read(&save->c, &n->db, sizeof(uint32_t));
     osiris_save_get_string(save, &tmp);
     if (*tmp.data) {
-      n->name = arena_strdup(&save->alloc, tmp.data);
-      cursor_read(&save->c, &n->arity, sizeof(uint8_t));
+      n->name = bg3_arena_strdup(&save->alloc, tmp.data);
+      bg3_cursor_read(&save->c, &n->arity, sizeof(uint8_t));
     }
     switch (n->type) {
-      case osiris_rete_node_db:
-      case osiris_rete_node_event: {
-        cursor_read(&save->c, &n->trigger.num_children, sizeof(uint32_t));
-        n->trigger.children = (osiris_rete_node_edge*)arena_calloc(
-            &save->alloc, n->trigger.num_children, sizeof(osiris_rete_node_edge));
+      case bg3_osiris_rete_node_db:
+      case bg3_osiris_rete_node_event: {
+        bg3_cursor_read(&save->c, &n->trigger.num_children, sizeof(uint32_t));
+        n->trigger.children = (bg3_osiris_rete_node_edge*)bg3_arena_calloc(
+            &save->alloc, n->trigger.num_children, sizeof(bg3_osiris_rete_node_edge));
         for (uint32_t j = 0; j < n->trigger.num_children; ++j) {
           osiris_save_get_rete_node_edge(save, &n->trigger.children[j]);
         }
         break;
       }
-      case osiris_rete_node_div_query:
-      case osiris_rete_node_sys_query:
-      case osiris_rete_node_query: {
+      case bg3_osiris_rete_node_div_query:
+      case bg3_osiris_rete_node_sys_query:
+      case bg3_osiris_rete_node_query: {
         break;
       }
-      case osiris_rete_node_join_and:
-      case osiris_rete_node_join_and_not: {
+      case bg3_osiris_rete_node_join_and:
+      case bg3_osiris_rete_node_join_and_not: {
         osiris_save_get_rete_node_edge(save, &n->join.child);
         osiris_save_get_u32(save, &n->join.left_parent.node_id);
         osiris_save_get_u32(save, &n->join.right_parent.node_id);
@@ -5563,26 +5615,26 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
         osiris_save_get_i8(save, &n->join.right_parent.db_distance);
         break;
       }
-      case osiris_rete_node_compare: {
+      case bg3_osiris_rete_node_compare: {
         osiris_save_get_operator_common(save, &n->compare.child, &n->compare.parent);
-        cursor_read(&save->c, &n->compare.left_var, 1);
-        cursor_read(&save->c, &n->compare.right_var, 1);
+        bg3_cursor_read(&save->c, &n->compare.left_var, 1);
+        bg3_cursor_read(&save->c, &n->compare.right_var, 1);
         osiris_save_get_value(save, &tmp, &n->compare.left_value);
         osiris_save_get_value(save, &tmp, &n->compare.right_value);
-        cursor_read(&save->c, &n->compare.opcode, 4);
+        bg3_cursor_read(&save->c, &n->compare.opcode, 4);
         break;
       }
-      case osiris_rete_node_terminal: {
+      case bg3_osiris_rete_node_terminal: {
         osiris_save_get_operator_common(save, &n->terminal.child, &n->terminal.parent);
         osiris_save_get_action_list(save, &tmp, &n->terminal.num_actions,
                                     &n->terminal.actions);
-        cursor_read(&save->c, &n->terminal.num_vars, 1);
+        bg3_cursor_read(&save->c, &n->terminal.num_vars, 1);
         if (n->terminal.num_vars) {
-          n->terminal.vars = (osiris_binding*)arena_calloc(
-              &save->alloc, n->terminal.num_vars, sizeof(osiris_binding));
+          n->terminal.vars = (bg3_osiris_binding*)bg3_arena_calloc(
+              &save->alloc, n->terminal.num_vars, sizeof(bg3_osiris_binding));
           for (uint8_t j = 0; j < n->terminal.num_vars; ++j) {
-            osiris_binding* p = n->terminal.vars + j;
-            cursor_read(&save->c, &p->is_variable, 1);
+            bg3_osiris_binding* p = n->terminal.vars + j;
+            bg3_cursor_read(&save->c, &p->is_variable, 1);
             if (p->is_variable != 1) {
               osiris_save_debug(save);
             }
@@ -5590,80 +5642,81 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
             osiris_save_get_binding1(save, p);
           }
         }
-        cursor_read(&save->c, &n->terminal.line, 4);
-        cursor_read(&save->c, &n->terminal.is_query, 1);
+        bg3_cursor_read(&save->c, &n->terminal.line, 4);
+        bg3_cursor_read(&save->c, &n->terminal.is_query, 1);
         break;
       }
       default:
         osiris_save_debug(save);
     }
   }
-  cursor_read(&save->c, &save->num_rete_adaptors, sizeof(uint32_t));
-  save->rete_adaptors = (osiris_rete_adaptor*)arena_calloc(
-      &save->alloc, save->num_rete_adaptors, sizeof(osiris_rete_adaptor));
+  bg3_cursor_read(&save->c, &save->num_rete_adaptors, sizeof(uint32_t));
+  save->rete_adaptors = (bg3_osiris_rete_adaptor*)bg3_arena_calloc(
+      &save->alloc, save->num_rete_adaptors, sizeof(bg3_osiris_rete_adaptor));
   for (uint32_t i = 0; i < save->num_rete_adaptors; ++i) {
-    osiris_rete_adaptor* a = save->rete_adaptors + i;
+    bg3_osiris_rete_adaptor* a = save->rete_adaptors + i;
     osiris_save_get_u32(save, &a->adaptor_id);
     osiris_save_get_u8(save, &a->num_values);
     if (a->num_values) {
-      a->values = (osiris_rete_adaptor_value*)arena_calloc(
-          &save->alloc, a->num_values, sizeof(osiris_rete_adaptor_value));
+      a->values = (bg3_osiris_rete_adaptor_value*)bg3_arena_calloc(
+          &save->alloc, a->num_values, sizeof(bg3_osiris_rete_adaptor_value));
       for (uint8_t j = 0; j < a->num_values; ++j) {
-        osiris_rete_adaptor_value* av = a->values + j;
+        bg3_osiris_rete_adaptor_value* av = a->values + j;
         osiris_save_get_u8(save, &av->index);
         osiris_save_get_value(save, &tmp, &av->value);
       }
     }
     osiris_save_get_u8(save, &a->num_vars);
     if (a->num_vars) {
-      a->vars = (uint8_t*)arena_calloc(&save->alloc, a->num_vars, sizeof(uint8_t));
-      cursor_read(&save->c, a->vars, a->num_vars);
+      a->vars = (uint8_t*)bg3_arena_calloc(&save->alloc, a->num_vars, sizeof(uint8_t));
+      bg3_cursor_read(&save->c, a->vars, a->num_vars);
     }
     osiris_save_get_u8(save, &a->num_pairs);
     if (a->num_pairs) {
-      a->pairs = (osiris_rete_adaptor_pair*)arena_calloc(
-          &save->alloc, a->num_pairs, sizeof(osiris_rete_adaptor_pair));
-      cursor_read(&save->c, a->pairs, sizeof(uint8_t) * 2 * a->num_pairs);
+      a->pairs = (bg3_osiris_rete_adaptor_pair*)bg3_arena_calloc(
+          &save->alloc, a->num_pairs, sizeof(bg3_osiris_rete_adaptor_pair));
+      bg3_cursor_read(&save->c, a->pairs, sizeof(uint8_t) * 2 * a->num_pairs);
     }
   }
-  cursor_read(&save->c, &save->num_dbs, sizeof(uint32_t));
-  save->dbs =
-      (osiris_rete_db*)arena_calloc(&save->alloc, save->num_dbs, sizeof(osiris_rete_db));
+  bg3_cursor_read(&save->c, &save->num_dbs, sizeof(uint32_t));
+  save->dbs = (bg3_osiris_rete_db*)bg3_arena_calloc(&save->alloc, save->num_dbs,
+                                                    sizeof(bg3_osiris_rete_db));
   for (uint32_t i = 0; i < save->num_dbs; ++i) {
-    osiris_rete_db* d = save->dbs + i;
+    bg3_osiris_rete_db* d = save->dbs + i;
     osiris_save_get_u32(save, &d->db_id);
     osiris_save_get_u8(save, &d->num_schema_columns);
-    d->schema_columns =
-        (uint16_t*)arena_calloc(&save->alloc, d->num_schema_columns, sizeof(uint16_t));
+    d->schema_columns = (uint16_t*)bg3_arena_calloc(&save->alloc, d->num_schema_columns,
+                                                    sizeof(uint16_t));
     for (uint8_t j = 0; j < d->num_schema_columns; ++j) {
       osiris_save_get_u16(save, d->schema_columns + j);
     }
     osiris_save_get_u32(save, &d->num_rows);
     if (d->num_rows) {
-      d->rows = (osiris_row*)arena_calloc(&save->alloc, d->num_rows, sizeof(osiris_row));
+      d->rows = (bg3_osiris_row*)bg3_arena_calloc(&save->alloc, d->num_rows,
+                                                  sizeof(bg3_osiris_row));
       for (uint32_t j = 0; j < d->num_rows; ++j) {
-        osiris_row* r = d->rows + j;
+        bg3_osiris_row* r = d->rows + j;
         uint8_t num_columns;
         osiris_save_get_u8(save, &num_columns);
         if (num_columns != d->num_schema_columns) {
           osiris_save_debug(save);
         }
-        r->columns = (osiris_variant*)arena_calloc(&save->alloc, num_columns,
-                                                   sizeof(osiris_variant));
+        r->columns = (bg3_osiris_variant*)bg3_arena_calloc(&save->alloc, num_columns,
+                                                           sizeof(bg3_osiris_variant));
         for (uint8_t k = 0; k < num_columns; ++k) {
           osiris_save_get_value(save, &tmp, r->columns + k);
         }
       }
     }
   }
-  cursor_read(&save->c, &save->num_goals, 4);
-  save->goals =
-      (osiris_goal*)arena_calloc(&save->alloc, save->num_goals, sizeof(osiris_goal));
+  bg3_cursor_read(&save->c, &save->num_goals, 4);
+  save->goals = (bg3_osiris_goal*)bg3_arena_calloc(&save->alloc, save->num_goals,
+                                                   sizeof(bg3_osiris_goal));
   for (uint32_t i = 0; i < save->num_goals; ++i) {
-    osiris_goal* g = save->goals + i;
+    bg3_osiris_goal* g = save->goals + i;
     osiris_save_get_u32(save, &g->goal_id);
     osiris_save_get_string(save, &tmp);
-    g->name = arena_strdup(&save->alloc, tmp.data);
+    g->name = bg3_arena_strdup(&save->alloc, tmp.data);
     osiris_save_get_u8(save, (uint8_t*)&g->combiner);
     uint32_t num_parents;
     osiris_save_get_u32(save, &num_parents);
@@ -5683,7 +5736,7 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
     osiris_save_get_u32(save, &g->num_children);
     if (g->num_children) {
       g->children =
-          (uint32_t*)arena_calloc(&save->alloc, g->num_children, sizeof(uint32_t));
+          (uint32_t*)bg3_arena_calloc(&save->alloc, g->num_children, sizeof(uint32_t));
       for (uint32_t j = 0; j < g->num_children; ++j) {
         osiris_save_get_u32(save, g->children + j);
       }
@@ -5697,57 +5750,57 @@ bg3_status osiris_save_init_binary(osiris_save* save, char* data, size_t data_le
   if (save->c.ptr != save->c.end) {
     osiris_save_debug(save);
   }
-  buffer_destroy(&tmp);
+  bg3_buffer_destroy(&tmp);
   return bg3_success;
 }
 
-static inline void osiris_save_put_u8(osiris_save* save, uint8_t val) {
-  buffer_push(&save->out, &val, sizeof(uint8_t));
+static inline void osiris_save_put_u8(bg3_osiris_save* save, uint8_t val) {
+  bg3_buffer_push(&save->out, &val, sizeof(uint8_t));
 }
 
-static inline void osiris_save_put_u16(osiris_save* save, uint16_t val) {
-  buffer_push(&save->out, &val, sizeof(uint16_t));
+static inline void osiris_save_put_u16(bg3_osiris_save* save, uint16_t val) {
+  bg3_buffer_push(&save->out, &val, sizeof(uint16_t));
 }
 
-static inline void osiris_save_put_u32(osiris_save* save, uint32_t val) {
-  buffer_push(&save->out, &val, sizeof(uint32_t));
+static inline void osiris_save_put_u32(bg3_osiris_save* save, uint32_t val) {
+  bg3_buffer_push(&save->out, &val, sizeof(uint32_t));
 }
 
-static inline void osiris_save_put_u64(osiris_save* save, uint64_t val) {
-  buffer_push(&save->out, &val, sizeof(uint64_t));
+static inline void osiris_save_put_u64(bg3_osiris_save* save, uint64_t val) {
+  bg3_buffer_push(&save->out, &val, sizeof(uint64_t));
 }
 
-static inline void osiris_save_put_string(osiris_save* save, char const* str) {
+static inline void osiris_save_put_string(bg3_osiris_save* save, char const* str) {
   if (str) {
     while (*str) {
-      buffer_putchar(&save->out, ((uint8_t)*str) ^ save->string_mask);
+      bg3_buffer_putchar(&save->out, ((uint8_t)*str) ^ save->string_mask);
       str++;
     }
   }
-  buffer_putchar(&save->out, save->string_mask);
+  bg3_buffer_putchar(&save->out, save->string_mask);
 }
 
-static void osiris_save_put_value(osiris_save* save, osiris_variant* value) {
-  osiris_save_put_u8(save, value->type == osiris_prim_type_enum ? 'e' : '0');
+static void osiris_save_put_value(bg3_osiris_save* save, bg3_osiris_variant* value) {
+  osiris_save_put_u8(save, value->type == bg3_osiris_prim_type_enum ? 'e' : '0');
   osiris_save_put_u16(save, value->index);
   switch (value->type) {
-    case osiris_prim_type_undef:
+    case bg3_osiris_prim_type_undef:
       break;
-    case osiris_prim_type_integer:
+    case bg3_osiris_prim_type_integer:
       osiris_save_put_u32(save, (uint32_t)value->integer);
       break;
-    case osiris_prim_type_integer64:
+    case bg3_osiris_prim_type_integer64:
       osiris_save_put_u64(save, (uint64_t)value->integer64);
       break;
-    case osiris_prim_type_real:
+    case bg3_osiris_prim_type_real:
       // punned through union
       osiris_save_put_u32(save, (uint32_t)value->integer);
       break;
-    case osiris_prim_type_enum:
+    case bg3_osiris_prim_type_enum:
       osiris_save_put_string(save, value->string);
       break;
-    case osiris_prim_type_string:
-    case osiris_prim_type_guidstring:
+    case bg3_osiris_prim_type_string:
+    case bg3_osiris_prim_type_guidstring:
       osiris_save_put_u8(save, value->string ? 1 : 0);
       if (value->string) {
         osiris_save_put_string(save, value->string);
@@ -5756,7 +5809,7 @@ static void osiris_save_put_value(osiris_save* save, osiris_variant* value) {
   }
 }
 
-static void osiris_save_put_binding(osiris_save* save, osiris_binding* b) {
+static void osiris_save_put_binding(bg3_osiris_save* save, bg3_osiris_binding* b) {
   osiris_save_put_u8(save, b->is_variable);
   osiris_save_put_value(save, &b->value);
   osiris_save_put_u8(save, b->is_grounded);
@@ -5769,12 +5822,12 @@ static void osiris_save_put_binding(osiris_save* save, osiris_binding* b) {
   }
 }
 
-static void osiris_save_put_action_list(osiris_save* save,
+static void osiris_save_put_action_list(bg3_osiris_save* save,
                                         uint32_t num_actions,
-                                        osiris_action* actions) {
+                                        bg3_osiris_action* actions) {
   osiris_save_put_u32(save, num_actions);
   for (uint32_t i = 0; i < num_actions; ++i) {
-    osiris_action* a = actions + i;
+    bg3_osiris_action* a = actions + i;
     osiris_save_put_string(save, a->function);
     if (a->function && *a->function) {
       osiris_save_put_u8(save, a->num_arguments > 0);
@@ -5790,16 +5843,16 @@ static void osiris_save_put_action_list(osiris_save* save,
   }
 }
 
-static void osiris_save_put_rete_node_edge(osiris_save* save,
-                                           osiris_rete_node_edge* edge) {
+static void osiris_save_put_rete_node_edge(bg3_osiris_save* save,
+                                           bg3_osiris_rete_node_edge* edge) {
   osiris_save_put_u32(save, edge->node_id);
   osiris_save_put_u32(save, edge->direction);
   osiris_save_put_u32(save, edge->goal_id);
 }
 
-static void osiris_save_put_operator_common(osiris_save* save,
-                                            osiris_rete_node_edge* child,
-                                            osiris_rete_node_parent* parent) {
+static void osiris_save_put_operator_common(bg3_osiris_save* save,
+                                            bg3_osiris_rete_node_edge* child,
+                                            bg3_osiris_rete_node_parent* parent) {
   osiris_save_put_rete_node_edge(save, child);
   osiris_save_put_u32(save, parent->node_id);
   osiris_save_put_u32(save, parent->adaptor);
@@ -5808,7 +5861,7 @@ static void osiris_save_put_operator_common(osiris_save* save,
   osiris_save_put_u8(save, parent->db_distance);
 }
 
-bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
+bg3_status bg3_osiris_save_write_binary(bg3_osiris_save* save, char const* path) {
   printf("writing story with %d nodes %d dbs %d adaptors\n", save->num_rete_nodes,
          save->num_dbs, save->num_rete_adaptors);
   FILE* fp = fopen(path, "wb");
@@ -5816,30 +5869,30 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
     return bg3_error_failed;
   }
   save->out.size = 0;
-  buffer_putchar(&save->out, 0);
+  bg3_buffer_putchar(&save->out, 0);
   save->string_mask = 0;
   osiris_save_put_string(save, save->version);
   osiris_save_put_u8(save, save->version_major);
   osiris_save_put_u8(save, save->version_minor);
   osiris_save_put_u8(save, 0);  // always little endian
   osiris_save_put_u8(save, save->unk0);
-  buffer_push(&save->out, save->story_version, 0x80);
+  bg3_buffer_push(&save->out, save->story_version, 0x80);
   osiris_save_put_u32(save, save->debug_flags);
   save->string_mask = OSIRIS_STRING_MASK;
   osiris_save_put_u32(save, save->num_type_infos);
   for (uint32_t i = 0; i < save->num_type_infos; ++i) {
-    osiris_type_info* ti = save->type_infos + i;
+    bg3_osiris_type_info* ti = save->type_infos + i;
     osiris_save_put_string(save, ti->name);
     osiris_save_put_u8(save, ti->index);
     osiris_save_put_u8(save, ti->alias_index);
   }
   osiris_save_put_u32(save, save->num_enums);
   for (uint32_t i = 0; i < save->num_enums; ++i) {
-    osiris_enum_info* e = save->enums + i;
+    bg3_osiris_enum_info* e = save->enums + i;
     osiris_save_put_u16(save, e->index);
     osiris_save_put_u32(save, e->num_entries);
     for (uint32_t j = 0; j < e->num_entries; ++j) {
-      osiris_enum_entry* et = e->entries + j;
+      bg3_osiris_enum_entry* et = e->entries + j;
       osiris_save_put_string(save, et->name);
       osiris_save_put_u64(save, et->value);
     }
@@ -5848,7 +5901,7 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
   osiris_save_put_u32(save, save->num_div_objects);
   osiris_save_put_u32(save, save->num_functions);
   for (uint32_t i = 0; i < save->num_functions; ++i) {
-    osiris_function_info* fn = save->functions + i;
+    bg3_osiris_function_info* fn = save->functions + i;
     osiris_save_put_u32(save, fn->line);
     osiris_save_put_u32(save, fn->num_conds);
     osiris_save_put_u32(save, fn->num_actions);
@@ -5872,7 +5925,7 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
   }
   osiris_save_put_u32(save, save->num_rete_nodes);
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
-    osiris_rete_node* n = save->rete_nodes + i;
+    bg3_osiris_rete_node* n = save->rete_nodes + i;
     osiris_save_put_u8(save, n->type);
     osiris_save_put_u32(save, n->node_id);
     osiris_save_put_u32(save, n->db);
@@ -5881,21 +5934,21 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
       osiris_save_put_u8(save, n->arity);
     }
     switch (n->type) {
-      case osiris_rete_node_db:
-      case osiris_rete_node_event: {
+      case bg3_osiris_rete_node_db:
+      case bg3_osiris_rete_node_event: {
         osiris_save_put_u32(save, n->trigger.num_children);
         for (uint32_t j = 0; j < n->trigger.num_children; ++j) {
           osiris_save_put_rete_node_edge(save, n->trigger.children + j);
         }
         break;
       }
-      case osiris_rete_node_div_query:
-      case osiris_rete_node_sys_query:
-      case osiris_rete_node_query: {
+      case bg3_osiris_rete_node_div_query:
+      case bg3_osiris_rete_node_sys_query:
+      case bg3_osiris_rete_node_query: {
         break;
       }
-      case osiris_rete_node_join_and:
-      case osiris_rete_node_join_and_not: {
+      case bg3_osiris_rete_node_join_and:
+      case bg3_osiris_rete_node_join_and_not: {
         osiris_save_put_rete_node_edge(save, &n->join.child);
         osiris_save_put_u32(save, n->join.left_parent.node_id);
         osiris_save_put_u32(save, n->join.right_parent.node_id);
@@ -5909,7 +5962,7 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
         osiris_save_put_u8(save, n->join.right_parent.db_distance);
         break;
       }
-      case osiris_rete_node_compare: {
+      case bg3_osiris_rete_node_compare: {
         osiris_save_put_operator_common(save, &n->compare.child, &n->compare.parent);
         osiris_save_put_u8(save, n->compare.left_var);
         osiris_save_put_u8(save, n->compare.right_var);
@@ -5918,7 +5971,7 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
         osiris_save_put_u32(save, n->compare.opcode);
         break;
       }
-      case osiris_rete_node_terminal: {
+      case bg3_osiris_rete_node_terminal: {
         osiris_save_put_operator_common(save, &n->terminal.child, &n->terminal.parent);
         osiris_save_put_action_list(save, n->terminal.num_actions, n->terminal.actions);
         osiris_save_put_u8(save, n->terminal.num_vars);
@@ -5935,7 +5988,7 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
   }
   osiris_save_put_u32(save, save->num_rete_adaptors);
   for (uint32_t i = 0; i < save->num_rete_adaptors; ++i) {
-    osiris_rete_adaptor* a = save->rete_adaptors + i;
+    bg3_osiris_rete_adaptor* a = save->rete_adaptors + i;
     osiris_save_put_u32(save, a->adaptor_id);
     osiris_save_put_u8(save, a->num_values);
     for (uint8_t j = 0; j < a->num_values; ++j) {
@@ -5943,13 +5996,13 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
       osiris_save_put_value(save, &a->values[j].value);
     }
     osiris_save_put_u8(save, a->num_vars);
-    buffer_push(&save->out, a->vars, a->num_vars);
+    bg3_buffer_push(&save->out, a->vars, a->num_vars);
     osiris_save_put_u8(save, a->num_pairs);
-    buffer_push(&save->out, a->pairs, sizeof(uint8_t) * 2 * a->num_pairs);
+    bg3_buffer_push(&save->out, a->pairs, sizeof(uint8_t) * 2 * a->num_pairs);
   }
   osiris_save_put_u32(save, save->num_dbs);
   for (uint32_t i = 0; i < save->num_dbs; ++i) {
-    osiris_rete_db* d = save->dbs + i;
+    bg3_osiris_rete_db* d = save->dbs + i;
     osiris_save_put_u32(save, d->db_id);
     osiris_save_put_u8(save, d->num_schema_columns);
     for (uint8_t j = 0; j < d->num_schema_columns; ++j) {
@@ -5965,7 +6018,7 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
   }
   osiris_save_put_u32(save, save->num_goals);
   for (uint32_t i = 0; i < save->num_goals; ++i) {
-    osiris_goal* g = save->goals + i;
+    bg3_osiris_goal* g = save->goals + i;
     osiris_save_put_u32(save, g->goal_id);
     osiris_save_put_string(save, g->name);
     osiris_save_put_u8(save, g->combiner);
@@ -5984,8 +6037,8 @@ bg3_status osiris_save_write_binary(osiris_save* save, char const* path) {
   osiris_save_put_action_list(save, save->num_global_actions, save->global_actions);
   fwrite(save->out.data, 1, save->out.size, fp);
   fclose(fp);
-  buffer_destroy(&save->out);
-  buffer_init(&save->out);
+  bg3_buffer_destroy(&save->out);
+  bg3_buffer_init(&save->out);
   return bg3_success;
 }
 
@@ -5993,7 +6046,7 @@ typedef struct osiris_node_binding_entry {
   int refcount;
   char* name;
   bool is_constant;
-  osiris_variant constant;
+  bg3_osiris_variant constant;
 } osiris_node_binding_entry;
 
 typedef struct osiris_node_bindings {
@@ -6002,13 +6055,13 @@ typedef struct osiris_node_bindings {
 } osiris_node_bindings;
 
 typedef struct osiris_node_bindings_table {
-  osiris_save* save;
-  hash nodes;
+  bg3_osiris_save* save;
+  bg3_hash nodes;
   int next_id;
 } osiris_node_bindings_table;
 
-static int get_adaptor_last_index(osiris_save* save, uint32_t adaptor_id) {
-  osiris_rete_adaptor* a = save->rete_adaptors + (adaptor_id - 1);
+static int get_adaptor_last_index(bg3_osiris_save* save, uint32_t adaptor_id) {
+  bg3_osiris_rete_adaptor* a = save->rete_adaptors + (adaptor_id - 1);
   int max_index = -1;
   for (uint8_t i = 0; i < a->num_pairs; ++i) {
     max_index = MAX(max_index, a->pairs[i].left);
@@ -6016,102 +6069,106 @@ static int get_adaptor_last_index(osiris_save* save, uint32_t adaptor_id) {
   return max_index;
 }
 
-static int get_node_arity(osiris_save* save, osiris_rete_node* node) {
+static int get_node_arity(bg3_osiris_save* save, bg3_osiris_rete_node* node) {
   switch (node->type) {
-    case osiris_rete_node_db:
-    case osiris_rete_node_event:
-    case osiris_rete_node_div_query:
-    case osiris_rete_node_sys_query:
-    case osiris_rete_node_query:
+    case bg3_osiris_rete_node_db:
+    case bg3_osiris_rete_node_event:
+    case bg3_osiris_rete_node_div_query:
+    case bg3_osiris_rete_node_sys_query:
+    case bg3_osiris_rete_node_query:
       assert(node->name);
       return node->arity;
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       return MAX(get_adaptor_last_index(save, node->join.left_parent.adaptor),
                  get_adaptor_last_index(save, node->join.right_parent.adaptor)) +
              1;
-    case osiris_rete_node_compare:
+    case bg3_osiris_rete_node_compare:
       return get_adaptor_last_index(save, node->compare.parent.adaptor) + 1;
-    case osiris_rete_node_terminal:
+    case bg3_osiris_rete_node_terminal:
       return get_adaptor_last_index(save, node->terminal.parent.adaptor) + 1;
     default:
       bg3_panic("invalid node type");
   }
 }
 
-static osiris_rete_node* get_left_parent_node(osiris_save* save, osiris_rete_node* node) {
+static bg3_osiris_rete_node* get_left_parent_node(bg3_osiris_save* save,
+                                                  bg3_osiris_rete_node* node) {
   switch (node->type) {
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       return save->rete_nodes + (node->join.left_parent.node_id - 1);
-    case osiris_rete_node_terminal:
+    case bg3_osiris_rete_node_terminal:
       return save->rete_nodes + (node->terminal.parent.node_id - 1);
-    case osiris_rete_node_compare:
+    case bg3_osiris_rete_node_compare:
       return save->rete_nodes + (node->compare.parent.node_id - 1);
     default:
       return 0;
   }
 }
 
-static osiris_rete_node* get_right_parent_node(osiris_save* save,
-                                               osiris_rete_node* node) {
+static bg3_osiris_rete_node* get_right_parent_node(bg3_osiris_save* save,
+                                                   bg3_osiris_rete_node* node) {
   switch (node->type) {
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       return save->rete_nodes + (node->join.right_parent.node_id - 1);
     default:
       return 0;
   }
 }
 
-static osiris_rete_adaptor* get_left_adaptor(osiris_save* save, osiris_rete_node* node) {
+static bg3_osiris_rete_adaptor* get_left_adaptor(bg3_osiris_save* save,
+                                                 bg3_osiris_rete_node* node) {
   switch (node->type) {
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       return save->rete_adaptors + (node->join.left_parent.adaptor - 1);
-    case osiris_rete_node_terminal:
+    case bg3_osiris_rete_node_terminal:
       return save->rete_adaptors + (node->terminal.parent.adaptor - 1);
-    case osiris_rete_node_compare:
+    case bg3_osiris_rete_node_compare:
       return save->rete_adaptors + (node->compare.parent.adaptor - 1);
     default:
       return 0;
   }
 }
 
-static osiris_rete_adaptor* get_right_adaptor(osiris_save* save, osiris_rete_node* node) {
+static bg3_osiris_rete_adaptor* get_right_adaptor(bg3_osiris_save* save,
+                                                  bg3_osiris_rete_node* node) {
   switch (node->type) {
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       return save->rete_adaptors + (node->join.right_parent.adaptor - 1);
     default:
       return 0;
   }
 }
 
-static osiris_rete_node* get_root_node(osiris_save* save, osiris_rete_node* node) {
-  osiris_rete_node* parent = get_left_parent_node(save, node);
+static bg3_osiris_rete_node* get_root_node(bg3_osiris_save* save,
+                                           bg3_osiris_rete_node* node) {
+  bg3_osiris_rete_node* parent = get_left_parent_node(save, node);
   if (parent) {
     return get_root_node(save, parent);
   }
   return node;
 }
 
-static int32_t get_owner_in_chain(osiris_save* save,
-                                  osiris_rete_node* node,
+static int32_t get_owner_in_chain(bg3_osiris_save* save,
+                                  bg3_osiris_rete_node* node,
                                   int32_t* node_owners) {
   int32_t cur_owner = node_owners[node->node_id - 1];
   if (cur_owner >= 0) {
     return cur_owner;
   }
   switch (node->type) {
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       return get_owner_in_chain(
           save, save->rete_nodes + (node->join.left_parent.node_id - 1), node_owners);
-    case osiris_rete_node_terminal:
+    case bg3_osiris_rete_node_terminal:
       return get_owner_in_chain(
           save, save->rete_nodes + (node->terminal.parent.node_id - 1), node_owners);
-    case osiris_rete_node_compare:
+    case bg3_osiris_rete_node_compare:
       return get_owner_in_chain(
           save, save->rete_nodes + (node->compare.parent.node_id - 1), node_owners);
     default:
@@ -6139,13 +6196,13 @@ static void osiris_node_bindings_replace_at(osiris_node_bindings* bindings,
 
 static osiris_node_bindings* osiris_node_bindings_table_get(
     osiris_node_bindings_table* table,
-    osiris_rete_node* node) {
+    bg3_osiris_rete_node* node) {
   if (node->name) {
     // we only track bindings for non-entry nodes, as event/db nodes may
     // occur multiple times in a given rule.
     return 0;
   }
-  hash_entry* e = hash_get_entry(&table->nodes, node);
+  bg3_hash_entry* e = bg3_hash_get_entry(&table->nodes, node);
   if (e) {
     return (osiris_node_bindings*)e->value;
   }
@@ -6163,7 +6220,7 @@ static osiris_node_bindings* osiris_node_bindings_table_get(
     entry->name = strdup(buf);
     new_bindings->entries[i] = entry;
   }
-  hash_set(&table->nodes, node, new_bindings);
+  bg3_hash_set(&table->nodes, node, new_bindings);
   return new_bindings;
 }
 
@@ -6176,11 +6233,11 @@ static void osiris_node_bindings_destroy_op(void* value, void* user_data) {
   free(bindings);
 }
 
-static hash_ops node_binding_hash_ops;
+static bg3_hash_ops node_binding_hash_ops;
 
 void osiris_node_bindings_table_init(osiris_node_bindings_table* table,
-                                     osiris_save* save) {
-  node_binding_hash_ops = (hash_ops){
+                                     bg3_osiris_save* save) {
+  node_binding_hash_ops = (bg3_hash_ops){
       .hash_fn = default_hash_ops.hash_fn,
       .equal_fn = default_hash_ops.equal_fn,
       .copy_key_fn = default_hash_ops.copy_key_fn,
@@ -6189,21 +6246,21 @@ void osiris_node_bindings_table_init(osiris_node_bindings_table* table,
       .free_value_fn = osiris_node_bindings_destroy_op,
   };
   memset(table, 0, sizeof(osiris_node_bindings_table));
-  hash_init(&table->nodes, &node_binding_hash_ops, 0);
+  bg3_hash_init(&table->nodes, &node_binding_hash_ops, 0);
   table->save = save;
 }
 
 void osiris_node_bindings_table_destroy(osiris_node_bindings_table* table) {
-  hash_destroy(&table->nodes);
+  bg3_hash_destroy(&table->nodes);
 }
 
 void osiris_node_bindings_table_propagate(osiris_node_bindings_table* table,
-                                          osiris_rete_node* node);
+                                          bg3_osiris_rete_node* node);
 
 static void propagate_from_to(osiris_node_bindings_table* table,
-                              osiris_rete_node* from,
-                              osiris_rete_node* to,
-                              osiris_rete_adaptor* adaptor) {
+                              bg3_osiris_rete_node* from,
+                              bg3_osiris_rete_node* to,
+                              bg3_osiris_rete_adaptor* adaptor) {
   if (to->name) {
     return;
   }
@@ -6224,27 +6281,27 @@ static void propagate_from_to(osiris_node_bindings_table* table,
 }
 
 void osiris_node_bindings_table_propagate(osiris_node_bindings_table* table,
-                                          osiris_rete_node* node) {
+                                          bg3_osiris_rete_node* node) {
   switch (node->type) {
-    case osiris_rete_node_db:
-    case osiris_rete_node_event:
-    case osiris_rete_node_div_query:
-    case osiris_rete_node_sys_query:
-    case osiris_rete_node_query:
+    case bg3_osiris_rete_node_db:
+    case bg3_osiris_rete_node_event:
+    case bg3_osiris_rete_node_div_query:
+    case bg3_osiris_rete_node_sys_query:
+    case bg3_osiris_rete_node_query:
       return;
-    case osiris_rete_node_compare:
-    case osiris_rete_node_terminal: {
-      osiris_rete_adaptor* a = get_left_adaptor(table->save, node);
-      osiris_rete_node* parent = get_left_parent_node(table->save, node);
+    case bg3_osiris_rete_node_compare:
+    case bg3_osiris_rete_node_terminal: {
+      bg3_osiris_rete_adaptor* a = get_left_adaptor(table->save, node);
+      bg3_osiris_rete_node* parent = get_left_parent_node(table->save, node);
       propagate_from_to(table, node, parent, a);
       break;
     }
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not: {
-      osiris_rete_adaptor* left_a = get_left_adaptor(table->save, node);
-      osiris_rete_adaptor* right_a = get_right_adaptor(table->save, node);
-      osiris_rete_node* left_parent = get_left_parent_node(table->save, node);
-      osiris_rete_node* right_parent = get_right_parent_node(table->save, node);
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not: {
+      bg3_osiris_rete_adaptor* left_a = get_left_adaptor(table->save, node);
+      bg3_osiris_rete_adaptor* right_a = get_right_adaptor(table->save, node);
+      bg3_osiris_rete_node* left_parent = get_left_parent_node(table->save, node);
+      bg3_osiris_rete_node* right_parent = get_right_parent_node(table->save, node);
       propagate_from_to(table, node, left_parent, left_a);
       propagate_from_to(table, node, right_parent, right_a);
       break;
@@ -6254,7 +6311,7 @@ void osiris_node_bindings_table_propagate(osiris_node_bindings_table* table,
   }
 }
 
-static char const* osiris_goal_state_name(osiris_goal_state state) {
+static char const* osiris_goal_state_name(bg3_osiris_goal_state state) {
   static const char* names[] = {
       "active",   "invalid1", "sleeping",   "invalid3",
       "invalid4", "invalid5", "finalising", "exited",
@@ -6262,86 +6319,89 @@ static char const* osiris_goal_state_name(osiris_goal_state state) {
   return state < COUNT_OF(names) ? names[state] : "unknown";
 }
 
-static void osiris_save_put_sexp_value(osiris_save* save, osiris_variant* value) {
-  if (value->type == osiris_prim_type_undef) {
-    ibuf_printf(&save->text_out, "undef");
+static void osiris_save_put_sexp_value(bg3_osiris_save* save, bg3_osiris_variant* value) {
+  if (value->type == bg3_osiris_prim_type_undef) {
+    bg3_ibuf_printf(&save->text_out, "undef");
     return;
   }
   bool needs_cast = value->index != value->type ||
-                    value->type == osiris_prim_type_guidstring ||
-                    value->type == osiris_prim_type_integer64;
+                    value->type == bg3_osiris_prim_type_guidstring ||
+                    value->type == bg3_osiris_prim_type_integer64;
   if (needs_cast) {
-    ibuf_printf(&save->text_out, "(%s ", save->type_infos[value->index - 1].name);
+    bg3_ibuf_printf(&save->text_out, "(%s ", save->type_infos[value->index - 1].name);
   }
   switch (value->type) {
-    case osiris_prim_type_integer:
-      ibuf_printf(&save->text_out, "%d", value->integer);
+    case bg3_osiris_prim_type_integer:
+      bg3_ibuf_printf(&save->text_out, "%d", value->integer);
       break;
-    case osiris_prim_type_integer64:
-      ibuf_printf(&save->text_out, "%" PRIi64, value->integer64);
+    case bg3_osiris_prim_type_integer64:
+      bg3_ibuf_printf(&save->text_out, "%" PRIi64, value->integer64);
       break;
-    case osiris_prim_type_real:
-      ibuf_printf(&save->text_out, "%f", value->real);
+    case bg3_osiris_prim_type_real:
+      bg3_ibuf_printf(&save->text_out, "%f", value->real);
       break;
-    case osiris_prim_type_string:
-    case osiris_prim_type_guidstring:
-      ibuf_printf(&save->text_out, "\"%s\"", value->string);
+    case bg3_osiris_prim_type_string:
+    case bg3_osiris_prim_type_guidstring:
+      bg3_ibuf_printf(&save->text_out, "\"%s\"", value->string);
       break;
-    case osiris_prim_type_enum:
-      ibuf_printf(&save->text_out, "%s", value->string);
+    case bg3_osiris_prim_type_enum:
+      bg3_ibuf_printf(&save->text_out, "%s", value->string);
       break;
     default:
       bg3_panic("invalid prim type");
   }
   if (needs_cast) {
-    ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_printf(&save->text_out, ")");
   }
 }
 
-static void osiris_save_put_sexp_binding(osiris_save* save, osiris_binding* binding) {
-  if (ibuf_get_next_col(&save->text_out) > 70 && ibuf_get_indent(&save->text_out) < 70) {
-    ibuf_fresh_line(&save->text_out);
+static void osiris_save_put_sexp_binding(bg3_osiris_save* save,
+                                         bg3_osiris_binding* binding) {
+  if (bg3_ibuf_get_next_col(&save->text_out) > 70 &&
+      bg3_ibuf_get_indent(&save->text_out) < 70) {
+    bg3_ibuf_fresh_line(&save->text_out);
   }
   if (!binding->is_variable) {
     osiris_save_put_sexp_value(save, &binding->value);
   } else {
-    ibuf_printf(&save->text_out, "Var%d", binding->index);
+    bg3_ibuf_printf(&save->text_out, "Var%d", binding->index);
   }
 }
 
-static void osiris_save_put_sexp_action_list(osiris_save* save,
+static void osiris_save_put_sexp_action_list(bg3_osiris_save* save,
                                              uint32_t num_actions,
-                                             osiris_action* actions) {
+                                             bg3_osiris_action* actions) {
   for (uint32_t i = 0; i < num_actions; ++i) {
-    osiris_action* a = actions + i;
-    ibuf_fresh_line(&save->text_out);
+    bg3_osiris_action* a = actions + i;
+    bg3_ibuf_fresh_line(&save->text_out);
     if (a->function) {
-      ibuf_printf(&save->text_out, "(%s%s", a->retract ? "not " : "", a->function);
-      ibuf_push_align(&save->text_out);
-      ibuf_push(&save->text_out, 1);
+      bg3_ibuf_printf(&save->text_out, "(%s%s", a->retract ? "not " : "", a->function);
+      bg3_ibuf_push_align(&save->text_out);
+      bg3_ibuf_push(&save->text_out, 1);
       for (uint8_t j = 0; j < a->num_arguments; ++j) {
-        ibuf_printf(&save->text_out, " ");
+        bg3_ibuf_printf(&save->text_out, " ");
         osiris_save_put_sexp_binding(save, a->arguments + j);
       }
-      ibuf_pop(&save->text_out);
-      ibuf_pop(&save->text_out);
-      ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_pop(&save->text_out);
+      bg3_ibuf_pop(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, ")");
     } else {
-      ibuf_printf(&save->text_out, "(GoalCompleted)");
+      bg3_ibuf_printf(&save->text_out, "(GoalCompleted)");
     }
   }
 }
 
-static void osiris_save_collect_goal_nodes(osiris_save* save, buffer* node_lists) {
+static void osiris_save_collect_goal_nodes(bg3_osiris_save* save,
+                                           bg3_buffer* node_lists) {
   int32_t* node_owners = (int32_t*)malloc(sizeof(int32_t) * save->num_rete_nodes);
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
     node_owners[i] = -1;
   }
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
-    osiris_rete_node* n = save->rete_nodes + i;
-    if (n->type == osiris_rete_node_event || n->type == osiris_rete_node_db) {
+    bg3_osiris_rete_node* n = save->rete_nodes + i;
+    if (n->type == bg3_osiris_rete_node_event || n->type == bg3_osiris_rete_node_db) {
       for (uint32_t j = 0; j < n->trigger.num_children; ++j) {
-        osiris_rete_node_edge* c = n->trigger.children + j;
+        bg3_osiris_rete_node_edge* c = n->trigger.children + j;
         if (node_owners[c->node_id - 1] != -1 &&
             node_owners[c->node_id - 1] != c->goal_id - 1) {
           bg3_panic("node %d is owned by multiple goals", c->node_id);
@@ -6351,8 +6411,8 @@ static void osiris_save_collect_goal_nodes(osiris_save* save, buffer* node_lists
     }
   }
   for (uint32_t i = 0; i < save->num_rete_nodes; ++i) {
-    osiris_rete_node* n = save->rete_nodes + i;
-    if (n->type != osiris_rete_node_terminal) {
+    bg3_osiris_rete_node* n = save->rete_nodes + i;
+    if (n->type != bg3_osiris_rete_node_terminal) {
       continue;
     }
     int32_t controlling_goal = get_owner_in_chain(save, n, node_owners);
@@ -6363,310 +6423,318 @@ static void osiris_save_collect_goal_nodes(osiris_save* save, buffer* node_lists
       fprintf(stderr, "unable to find a controlling goal for node %d\n", i + 1);
       continue;
     }
-    buffer_push(node_lists + controlling_goal, &i, sizeof(uint32_t));
+    bg3_buffer_push(node_lists + controlling_goal, &i, sizeof(uint32_t));
   }
   free(node_owners);
 }
 
-void osiris_save_put_sexp_edge(osiris_save* save, osiris_rete_node_edge* child) {
-  ibuf_printf(&save->text_out, "(%d %d %d)", child->node_id, child->direction,
-              child->goal_id);
+void osiris_save_put_sexp_edge(bg3_osiris_save* save, bg3_osiris_rete_node_edge* child) {
+  bg3_ibuf_printf(&save->text_out, "(%d %d %d)", child->node_id, child->direction,
+                  child->goal_id);
 }
 
-void osiris_save_put_sexp_parent(osiris_save* save, osiris_rete_node_parent* parent) {
-  ibuf_printf(&save->text_out, "(%d %d %d ", parent->node_id, parent->adaptor,
-              parent->db_node);
+void osiris_save_put_sexp_parent(bg3_osiris_save* save,
+                                 bg3_osiris_rete_node_parent* parent) {
+  bg3_ibuf_printf(&save->text_out, "(%d %d %d ", parent->node_id, parent->adaptor,
+                  parent->db_node);
   osiris_save_put_sexp_edge(save, &parent->db_edge);
-  ibuf_printf(&save->text_out, " %d)", parent->db_distance);
+  bg3_ibuf_printf(&save->text_out, " %d)", parent->db_distance);
 }
 
-void osiris_save_put_sexp_operator_common(osiris_save* save,
-                                          osiris_rete_node_edge* child,
-                                          osiris_rete_node_parent* parent) {
-  ibuf_printf(&save->text_out, "(common ");
+void osiris_save_put_sexp_operator_common(bg3_osiris_save* save,
+                                          bg3_osiris_rete_node_edge* child,
+                                          bg3_osiris_rete_node_parent* parent) {
+  bg3_ibuf_printf(&save->text_out, "(common ");
   osiris_save_put_sexp_edge(save, child);
-  ibuf_printf(&save->text_out, " ");
+  bg3_ibuf_printf(&save->text_out, " ");
   osiris_save_put_sexp_parent(save, parent);
-  ibuf_printf(&save->text_out, ")");
+  bg3_ibuf_printf(&save->text_out, ")");
 }
 
-void osiris_save_put_sexp_adaptor(osiris_save* save, osiris_rete_adaptor* adaptor) {
-  ibuf_printf(&save->text_out, "(adaptor%s",
-              adaptor->num_values + adaptor->num_vars + adaptor->num_pairs ? " " : "");
-  ibuf_push_align(&save->text_out);
+void osiris_save_put_sexp_adaptor(bg3_osiris_save* save,
+                                  bg3_osiris_rete_adaptor* adaptor) {
+  bg3_ibuf_printf(
+      &save->text_out, "(adaptor%s",
+      adaptor->num_values + adaptor->num_vars + adaptor->num_pairs ? " " : "");
+  bg3_ibuf_push_align(&save->text_out);
   bool is_first = true;
   if (adaptor->num_values) {
     is_first = false;
-    ibuf_printf(&save->text_out, "(constants");
-    ibuf_push_align(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, "(constants");
+    bg3_ibuf_push_align(&save->text_out);
     for (uint8_t i = 0; i < adaptor->num_values; ++i) {
-      ibuf_printf(&save->text_out, " (%d ", adaptor->values[i].index);
+      bg3_ibuf_printf(&save->text_out, " (%d ", adaptor->values[i].index);
       osiris_save_put_sexp_value(save, &adaptor->values[i].value);
-      ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_printf(&save->text_out, ")");
     }
-    ibuf_printf(&save->text_out, ")");
-    ibuf_pop(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_pop(&save->text_out);
   }
   if (adaptor->num_vars) {
     if (!is_first) {
-      ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_fresh_line(&save->text_out);
     }
     is_first = false;
-    ibuf_printf(&save->text_out, "(vars");
-    ibuf_push_align(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, "(vars");
+    bg3_ibuf_push_align(&save->text_out);
     for (uint8_t i = 0; i < adaptor->num_vars; ++i) {
-      ibuf_printf(&save->text_out, " %d", adaptor->vars[i]);
+      bg3_ibuf_printf(&save->text_out, " %d", adaptor->vars[i]);
     }
-    ibuf_printf(&save->text_out, ")");
-    ibuf_pop(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_pop(&save->text_out);
   }
   if (adaptor->num_pairs) {
     if (!is_first) {
-      ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_fresh_line(&save->text_out);
     }
     is_first = false;
-    ibuf_fresh_line(&save->text_out);
-    ibuf_printf(&save->text_out, "(pairs");
-    ibuf_push_align(&save->text_out);
+    bg3_ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, "(pairs");
+    bg3_ibuf_push_align(&save->text_out);
     for (uint8_t i = 0; i < adaptor->num_pairs; ++i) {
-      ibuf_printf(&save->text_out, " (%d %d)", adaptor->pairs[i].left,
-                  adaptor->pairs[i].right);
+      bg3_ibuf_printf(&save->text_out, " (%d %d)", adaptor->pairs[i].left,
+                      adaptor->pairs[i].right);
     }
-    ibuf_printf(&save->text_out, ")");
-    ibuf_pop(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_pop(&save->text_out);
   }
-  ibuf_printf(&save->text_out, ")");
-  ibuf_pop(&save->text_out);
+  bg3_ibuf_printf(&save->text_out, ")");
+  bg3_ibuf_pop(&save->text_out);
 }
 
-void osiris_save_put_sexp_db(osiris_save* save, osiris_rete_db* db) {
-  ibuf_printf(&save->text_out, "(db %d (", db->db_id);
-  ibuf_push(&save->text_out, 2);
+void osiris_save_put_sexp_db(bg3_osiris_save* save, bg3_osiris_rete_db* db) {
+  bg3_ibuf_printf(&save->text_out, "(db %d (", db->db_id);
+  bg3_ibuf_push(&save->text_out, 2);
   for (uint8_t i = 0; i < db->num_schema_columns; ++i) {
     if (i) {
-      ibuf_printf(&save->text_out, " ");
+      bg3_ibuf_printf(&save->text_out, " ");
     }
-    ibuf_printf(&save->text_out, "%s", save->type_infos[db->schema_columns[i] - 1].name);
+    bg3_ibuf_printf(&save->text_out, "%s",
+                    save->type_infos[db->schema_columns[i] - 1].name);
   }
-  ibuf_printf(&save->text_out, ")");
+  bg3_ibuf_printf(&save->text_out, ")");
   for (uint32_t i = 0; i < db->num_rows; ++i) {
-    ibuf_fresh_line(&save->text_out);
-    ibuf_printf(&save->text_out, "(");
+    bg3_ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, "(");
     for (uint32_t j = 0; j < db->num_schema_columns; ++j) {
       if (j) {
-        ibuf_printf(&save->text_out, " ");
+        bg3_ibuf_printf(&save->text_out, " ");
       }
       osiris_save_put_sexp_value(save, db->rows[i].columns + j);
     }
-    ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_printf(&save->text_out, ")");
   }
-  ibuf_pop(&save->text_out);
-  ibuf_printf(&save->text_out, ")");
+  bg3_ibuf_pop(&save->text_out);
+  bg3_ibuf_printf(&save->text_out, ")");
 }
 
-void osiris_save_put_sexp_condition_list(osiris_save* save,
-                                         osiris_rete_node* node,
-                                         osiris_rete_adaptor* child_adaptor,
+void osiris_save_put_sexp_condition_list(bg3_osiris_save* save,
+                                         bg3_osiris_rete_node* node,
+                                         bg3_osiris_rete_adaptor* child_adaptor,
                                          osiris_node_bindings* child_bindings,
                                          bool is_not,
                                          osiris_node_bindings_table* table) {
-  osiris_rete_node* left_parent = get_left_parent_node(save, node);
-  osiris_rete_adaptor* left_adaptor = get_left_adaptor(save, node);
-  osiris_rete_node* right_parent = get_right_parent_node(save, node);
-  osiris_rete_adaptor* right_adaptor = get_right_adaptor(save, node);
+  bg3_osiris_rete_node* left_parent = get_left_parent_node(save, node);
+  bg3_osiris_rete_adaptor* left_adaptor = get_left_adaptor(save, node);
+  bg3_osiris_rete_node* right_parent = get_right_parent_node(save, node);
+  bg3_osiris_rete_adaptor* right_adaptor = get_right_adaptor(save, node);
   osiris_node_bindings* bindings = osiris_node_bindings_table_get(table, node);
   if (left_parent) {
     osiris_save_put_sexp_condition_list(save, left_parent, left_adaptor, bindings, false,
                                         table);
   }
   if (right_parent) {
-    ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_fresh_line(&save->text_out);
     osiris_save_put_sexp_condition_list(save, right_parent, right_adaptor, bindings,
-                                        node->type == osiris_rete_node_join_and_not,
+                                        node->type == bg3_osiris_rete_node_join_and_not,
                                         table);
   }
   if (node->name) {
     if (left_parent) {
-      ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_fresh_line(&save->text_out);
     }
-    ibuf_printf(&save->text_out, "(%s%s", is_not ? "not " : "", node->name);
+    bg3_ibuf_printf(&save->text_out, "(%s%s", is_not ? "not " : "", node->name);
     for (size_t i = 0; i < node->arity; ++i) {
       if (child_adaptor->vars[i] == 255) {
         bool found = false;
         for (uint8_t j = 0; j < child_adaptor->num_values; ++j) {
           if (child_adaptor->values[j].index == i) {
-            ibuf_printf(&save->text_out, " ");
+            bg3_ibuf_printf(&save->text_out, " ");
             osiris_save_put_sexp_value(save, &child_adaptor->values[j].value);
             found = true;
             break;
           }
         }
         if (!found) {
-          ibuf_printf(&save->text_out, " _");
+          bg3_ibuf_printf(&save->text_out, " _");
         }
       } else {
-        ibuf_printf(&save->text_out, " %s",
-                    child_bindings->entries[child_adaptor->vars[i]]->name);
+        bg3_ibuf_printf(&save->text_out, " %s",
+                        child_bindings->entries[child_adaptor->vars[i]]->name);
       }
     }
-    ibuf_printf(&save->text_out, ")");
-  } else if (node->type == osiris_rete_node_compare) {
+    bg3_ibuf_printf(&save->text_out, ")");
+  } else if (node->type == bg3_osiris_rete_node_compare) {
     if (left_parent) {
-      ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_fresh_line(&save->text_out);
     }
     static const char* opcode_names[] = {
         "<", "<=", ">", ">=", "=", "!=",
     };
-    ibuf_printf(&save->text_out, "(%s", opcode_names[node->compare.opcode]);
-    ibuf_printf(&save->text_out, " ");
+    bg3_ibuf_printf(&save->text_out, "(%s", opcode_names[node->compare.opcode]);
+    bg3_ibuf_printf(&save->text_out, " ");
     if (node->compare.left_var == 255) {
       osiris_save_put_sexp_value(save, &node->compare.left_value);
     } else {
       if (node->compare.left_var >= bindings->arity) {
         bg3_panic("index out of range");
       }
-      ibuf_printf(&save->text_out, "%s", bindings->entries[node->compare.left_var]->name);
+      bg3_ibuf_printf(&save->text_out, "%s",
+                      bindings->entries[node->compare.left_var]->name);
     }
-    ibuf_printf(&save->text_out, " ");
+    bg3_ibuf_printf(&save->text_out, " ");
     if (node->compare.right_var == 255) {
       osiris_save_put_sexp_value(save, &node->compare.right_value);
     } else {
       if (node->compare.right_var >= bindings->arity) {
         bg3_panic("index out of range");
       }
-      ibuf_printf(&save->text_out, "%s",
-                  bindings->entries[node->compare.right_var]->name);
+      bg3_ibuf_printf(&save->text_out, "%s",
+                      bindings->entries[node->compare.right_var]->name);
     }
-    ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_printf(&save->text_out, ")");
   }
 }
 
-bool osiris_save_put_sexp_node_chain(osiris_save* save, osiris_rete_node* node) {
-  osiris_rete_node* left_parent = get_left_parent_node(save, node);
-  osiris_rete_node* right_parent = get_right_parent_node(save, node);
+bool osiris_save_put_sexp_node_chain(bg3_osiris_save* save, bg3_osiris_rete_node* node) {
+  bg3_osiris_rete_node* left_parent = get_left_parent_node(save, node);
+  bg3_osiris_rete_node* right_parent = get_right_parent_node(save, node);
   if (!left_parent) {
     return false;
   }
   bool printed_parent = osiris_save_put_sexp_node_chain(save, left_parent);
   if (printed_parent) {
-    ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_fresh_line(&save->text_out);
   }
   if (node->db) {
-    osiris_rete_db* db = save->dbs + (node->db - 1);
+    bg3_osiris_rete_db* db = save->dbs + (node->db - 1);
     osiris_save_put_sexp_db(save, db);
-    ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_fresh_line(&save->text_out);
   }
   switch (node->type) {
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       osiris_save_put_sexp_adaptor(
           save, save->rete_adaptors + (node->join.left_parent.adaptor - 1));
-      ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_fresh_line(&save->text_out);
       osiris_save_put_sexp_adaptor(
           save, save->rete_adaptors + (node->join.right_parent.adaptor - 1));
-      ibuf_fresh_line(&save->text_out);
-      ibuf_printf(&save->text_out, "(%s%d %s/%d[%d] %d ",
-                  node->type == osiris_rete_node_join_and_not ? "not " : "",
-                  node->node_id, right_parent->name, right_parent->arity,
-                  right_parent->type, node->db);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(%s%d %s/%d[%d] %d ",
+                      node->type == bg3_osiris_rete_node_join_and_not ? "not " : "",
+                      node->node_id, right_parent->name, right_parent->arity,
+                      right_parent->type, node->db);
       osiris_save_put_sexp_edge(save, &node->join.child);
-      ibuf_printf(&save->text_out, " ");
+      bg3_ibuf_printf(&save->text_out, " ");
       osiris_save_put_sexp_parent(save, &node->join.left_parent);
-      ibuf_printf(&save->text_out, " ");
+      bg3_ibuf_printf(&save->text_out, " ");
       osiris_save_put_sexp_parent(save, &node->join.right_parent);
-      ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_printf(&save->text_out, ")");
       break;
-    case osiris_rete_node_compare:
+    case bg3_osiris_rete_node_compare:
       osiris_save_put_sexp_operator_common(save, &node->compare.child,
                                            &node->compare.parent);
-      ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_fresh_line(&save->text_out);
       osiris_save_put_sexp_adaptor(
           save, save->rete_adaptors + (node->compare.parent.adaptor - 1));
-      ibuf_fresh_line(&save->text_out);
-      ibuf_printf(&save->text_out, "(compare %d %d %d %d %d)", node->compare.opcode,
-                  node->compare.left_var, node->compare.right_var,
-                  node->compare.left_value.index, node->compare.right_value.index);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(compare %d %d %d %d %d)", node->compare.opcode,
+                      node->compare.left_var, node->compare.right_var,
+                      node->compare.left_value.index, node->compare.right_value.index);
       break;
     default:
-      ibuf_printf(&save->text_out, "(unexpected %d)", node->type);
+      bg3_ibuf_printf(&save->text_out, "(unexpected %d)", node->type);
       break;
   }
   return true;
 }
 
-bg3_status osiris_save_write_sexp(osiris_save* save, char const* path, bool verbose) {
+bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
+                                      char const* path,
+                                      bool verbose) {
   FILE* fp = fopen(path, "wb");
   if (!fp) {
     return bg3_error_failed;
   }
-  buffer* node_lists = (buffer*)calloc(save->num_goals, sizeof(buffer));
+  bg3_buffer* node_lists = (bg3_buffer*)calloc(save->num_goals, sizeof(bg3_buffer));
   osiris_save_collect_goal_nodes(save, node_lists);
-  ibuf_clear(&save->text_out);
-  ibuf_printf(&save->text_out, "(defstory \"%s\" \"%s\" %d %d %d)\n", save->version,
-              save->story_version, save->version_major, save->version_minor,
-              save->debug_flags);
+  bg3_ibuf_clear(&save->text_out);
+  bg3_ibuf_printf(&save->text_out, "(defstory \"%s\" \"%s\" %d %d %d)\n", save->version,
+                  save->story_version, save->version_major, save->version_minor,
+                  save->debug_flags);
   for (uint32_t i = 0; i < save->num_type_infos; ++i) {
-    osiris_type_info* ti = save->type_infos + i;
-    ibuf_fresh_line(&save->text_out);
+    bg3_osiris_type_info* ti = save->type_infos + i;
+    bg3_ibuf_fresh_line(&save->text_out);
     if (ti->alias_index) {
-      ibuf_printf(&save->text_out, "(deftype %s %s)", ti->name,
-                  save->type_infos[ti->alias_index - 1].name);
+      bg3_ibuf_printf(&save->text_out, "(deftype %s %s)", ti->name,
+                      save->type_infos[ti->alias_index - 1].name);
     }
   }
   for (uint32_t i = 0; i < save->num_enums; ++i) {
-    osiris_enum_info* ei = save->enums + i;
-    ibuf_fresh_line(&save->text_out);
-    ibuf_printf(&save->text_out, "(defenum %s", save->type_infos[ei->index - 1].name);
-    ibuf_push(&save->text_out, 2);
+    bg3_osiris_enum_info* ei = save->enums + i;
+    bg3_ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, "(defenum %s", save->type_infos[ei->index - 1].name);
+    bg3_ibuf_push(&save->text_out, 2);
     for (uint32_t j = 0; j < ei->num_entries; ++j) {
-      ibuf_fresh_line(&save->text_out);
-      ibuf_printf(&save->text_out, "(%s %" PRIi64 ")", ei->entries[j].name,
-                  ei->entries[j].value);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(%s %" PRIi64 ")", ei->entries[j].name,
+                      ei->entries[j].value);
     }
-    ibuf_printf(&save->text_out, ")");
-    ibuf_pop(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_pop(&save->text_out);
   }
   for (uint32_t i = 0; i < save->num_functions; ++i) {
     static const char* fn_type_names[] = {
         "invalid", "event",    "divquery", "divcall", "db",
         "proc",    "sysquery", "syscall",  "query",
     };
-    osiris_function_info* fi = save->functions + i;
-    ibuf_fresh_line(&save->text_out);
-    ibuf_printf(&save->text_out, "(def%s %s", fn_type_names[fi->type], fi->name);
+    bg3_osiris_function_info* fi = save->functions + i;
+    bg3_ibuf_fresh_line(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, "(def%s %s", fn_type_names[fi->type], fi->name);
     if (fi->is_external) {
       if (verbose) {
-        ibuf_printf(&save->text_out, " %d %d %d %d %d %d", fi->sys_opcode, fi->unused0,
-                    fi->is_external, fi->out_mask, fi->num_conds, fi->num_actions);
+        bg3_ibuf_printf(&save->text_out, " %d %d %d %d %d %d", fi->sys_opcode,
+                        fi->unused0, fi->is_external, fi->out_mask, fi->num_conds,
+                        fi->num_actions);
       }
-      ibuf_printf(&save->text_out, " %d", fi->div_opcode);
+      bg3_ibuf_printf(&save->text_out, " %d", fi->div_opcode);
     }
     if (!fi->is_external && fi->sys_opcode) {
-      ibuf_printf(&save->text_out, " %d", fi->sys_opcode);
+      bg3_ibuf_printf(&save->text_out, " %d", fi->sys_opcode);
     }
-    ibuf_push(&save->text_out, 2);
+    bg3_ibuf_push(&save->text_out, 2);
     for (uint8_t j = 0; j < fi->num_params; ++j) {
-      osiris_type_info* ti = save->type_infos + (fi->params[j] - 1);
+      bg3_osiris_type_info* ti = save->type_infos + (fi->params[j] - 1);
       if (fi->out_mask & OSIRIS_OUT_PARAM_MASK(j)) {
-        ibuf_printf(&save->text_out, " (out %s)", ti->name);
+        bg3_ibuf_printf(&save->text_out, " (out %s)", ti->name);
       } else {
-        ibuf_printf(&save->text_out, " %s", ti->name);
+        bg3_ibuf_printf(&save->text_out, " %s", ti->name);
       }
     }
     if (fi->rete_node && verbose) {
-      osiris_rete_node* node = save->rete_nodes + (fi->rete_node - 1);
+      bg3_osiris_rete_node* node = save->rete_nodes + (fi->rete_node - 1);
       if (node->db && save->dbs[node->db - 1].num_rows) {
-        ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_fresh_line(&save->text_out);
         osiris_save_put_sexp_db(save, save->dbs + (node->db - 1));
       }
     }
-    ibuf_pop(&save->text_out);
-    ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_pop(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, ")");
   }
   for (uint32_t i = 0; i < save->num_goals; ++i) {
     static const char* combiner_names[] = {"or", "and"};
-    osiris_goal* g = save->goals + i;
-    ibuf_fresh_line(&save->text_out);
+    bg3_osiris_goal* g = save->goals + i;
+    bg3_ibuf_fresh_line(&save->text_out);
     // TODO: there's, like, 1 goal name with a space in it -_-
     char* escaped_goal_name = strdup(g->name);
     for (char* c = escaped_goal_name; *c; ++c) {
@@ -6674,95 +6742,95 @@ bg3_status osiris_save_write_sexp(osiris_save* save, char const* path, bool verb
         *c = '_';
       }
     }
-    ibuf_printf(&save->text_out, "(defgoal (%s %s %s)", escaped_goal_name,
-                osiris_goal_state_name(g->state), combiner_names[g->combiner]);
+    bg3_ibuf_printf(&save->text_out, "(defgoal (%s %s %s)", escaped_goal_name,
+                    osiris_goal_state_name(g->state), combiner_names[g->combiner]);
     free(escaped_goal_name);
-    ibuf_push(&save->text_out, 2);
+    bg3_ibuf_push(&save->text_out, 2);
     if (g->parent) {
-      ibuf_fresh_line(&save->text_out);
-      ibuf_printf(&save->text_out, "(parent %s)", save->goals[g->parent - 1].name);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(parent %s)", save->goals[g->parent - 1].name);
     }
     if (g->num_init_actions) {
-      ibuf_fresh_line(&save->text_out);
-      ibuf_printf(&save->text_out, "(init");
-      ibuf_push(&save->text_out, 2);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(init");
+      bg3_ibuf_push(&save->text_out, 2);
       osiris_save_put_sexp_action_list(save, g->num_init_actions, g->init_actions);
-      ibuf_printf(&save->text_out, ")");
-      ibuf_pop(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_pop(&save->text_out);
     }
     if (g->num_exit_actions) {
-      ibuf_fresh_line(&save->text_out);
-      ibuf_printf(&save->text_out, "(exit");
-      ibuf_push(&save->text_out, 2);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(exit");
+      bg3_ibuf_push(&save->text_out, 2);
       osiris_save_put_sexp_action_list(save, g->num_exit_actions, g->exit_actions);
-      ibuf_printf(&save->text_out, ")");
-      ibuf_pop(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_pop(&save->text_out);
     }
-    buffer* owned_nodes_buf = node_lists + i;
+    bg3_buffer* owned_nodes_buf = node_lists + i;
     size_t num_owned_nodes = owned_nodes_buf->size / sizeof(uint32_t);
     uint32_t* owned_nodes = (uint32_t*)owned_nodes_buf->data;
     for (size_t i = 0; i < num_owned_nodes; ++i) {
       if (verbose) {
-        osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
-        osiris_rete_node* root = get_root_node(save, node);
-        ibuf_fresh_line(&save->text_out);
-        ibuf_printf(&save->text_out, "(%s %d %s/%d (",
-                    root->type == osiris_rete_node_query ? "query" : "rule",
-                    node->node_id, root->name, root->arity);
-        ibuf_push_align(&save->text_out);
+        bg3_osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
+        bg3_osiris_rete_node* root = get_root_node(save, node);
+        bg3_ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, "(%s %d %s/%d (",
+                        root->type == bg3_osiris_rete_node_query ? "query" : "rule",
+                        node->node_id, root->name, root->arity);
+        bg3_ibuf_push_align(&save->text_out);
         osiris_save_put_sexp_node_chain(save, get_left_parent_node(save, node));
-        ibuf_printf(&save->text_out, ")");
-        ibuf_pop(&save->text_out);
-        ibuf_push(&save->text_out, 2);
-        ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, ")");
+        bg3_ibuf_pop(&save->text_out);
+        bg3_ibuf_push(&save->text_out, 2);
+        bg3_ibuf_fresh_line(&save->text_out);
         osiris_save_put_sexp_operator_common(save, &node->terminal.child,
                                              &node->terminal.parent);
-        ibuf_fresh_line(&save->text_out);
-        ibuf_printf(&save->text_out, "(is_query %d)", node->terminal.is_query);
-        ibuf_fresh_line(&save->text_out);
-        ibuf_printf(&save->text_out, "(bindings");
+        bg3_ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, "(is_query %d)", node->terminal.is_query);
+        bg3_ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, "(bindings");
         for (uint8_t j = 0; j < node->terminal.num_vars; ++j) {
-          osiris_binding* b = node->terminal.vars + j;
-          ibuf_printf(&save->text_out, " ");
+          bg3_osiris_binding* b = node->terminal.vars + j;
+          bg3_ibuf_printf(&save->text_out, " ");
           osiris_save_put_sexp_binding(save, node->terminal.vars + j);
-          ibuf_printf(&save->text_out, "[v0=%d;g=%d;u0=%d;v1=%d;i=%d;d=%d;l=%d;vi=%d]",
-                      b->is_variable, b->is_grounded, b->unused0, b->is_variable_again,
-                      b->index, b->is_dead, b->is_live,
-                      node->terminal.vars[j].value.index);
+          bg3_ibuf_printf(&save->text_out,
+                          "[v0=%d;g=%d;u0=%d;v1=%d;i=%d;d=%d;l=%d;vi=%d]", b->is_variable,
+                          b->is_grounded, b->unused0, b->is_variable_again, b->index,
+                          b->is_dead, b->is_live, node->terminal.vars[j].value.index);
         }
-        ibuf_printf(&save->text_out, ")");
-        ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, ")");
+        bg3_ibuf_fresh_line(&save->text_out);
         osiris_save_put_sexp_adaptor(
             save, save->rete_adaptors + (node->terminal.parent.adaptor - 1));
-        ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_fresh_line(&save->text_out);
         osiris_save_put_sexp_action_list(save, node->terminal.num_actions,
                                          node->terminal.actions);
-        ibuf_printf(&save->text_out, ")");
-        ibuf_pop(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, ")");
+        bg3_ibuf_pop(&save->text_out);
       } else {
-        osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
+        bg3_osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
         osiris_node_bindings_table table;
         osiris_node_bindings_table_init(&table, save);
         osiris_node_bindings_table_propagate(&table, node);
-        ibuf_fresh_line(&save->text_out);
-        ibuf_printf(&save->text_out, "(rule (");
-        ibuf_push_align(&save->text_out);
+        bg3_ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, "(rule (");
+        bg3_ibuf_push_align(&save->text_out);
         osiris_save_put_sexp_condition_list(save, node, 0, 0, false, &table);
-        ibuf_printf(&save->text_out, ")");
-        ibuf_pop(&save->text_out);
-        ibuf_push(&save->text_out, 2);
-        ibuf_fresh_line(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, ")");
+        bg3_ibuf_pop(&save->text_out);
+        bg3_ibuf_push(&save->text_out, 2);
+        bg3_ibuf_fresh_line(&save->text_out);
         osiris_save_put_sexp_action_list(save, node->terminal.num_actions,
                                          node->terminal.actions);
-        ibuf_printf(&save->text_out, ")");
-        ibuf_pop(&save->text_out);
+        bg3_ibuf_printf(&save->text_out, ")");
+        bg3_ibuf_pop(&save->text_out);
         osiris_node_bindings_table_destroy(&table);
       }
     }
-    ibuf_printf(&save->text_out, ")");
-    ibuf_pop(&save->text_out);
+    bg3_ibuf_printf(&save->text_out, ")");
+    bg3_ibuf_pop(&save->text_out);
   }
-  ibuf_fresh_line(&save->text_out);
+  bg3_ibuf_fresh_line(&save->text_out);
   fwrite(save->text_out.output.data, 1, save->text_out.output.size, fp);
   fclose(fp);
   return bg3_success;
@@ -6782,7 +6850,7 @@ static bool symtab_equal_fn(void* lhs, void* rhs, void* user_data) {
 }
 
 static void* symtab_copy_fn(void* value, void* user_data) {
-  return arena_strdup((arena*)user_data, (char const*)value);
+  return bg3_arena_strdup((bg3_arena*)user_data, (char const*)value);
 }
 
 static void symtab_free_fn(void* value, void* user_data) {
@@ -6790,13 +6858,13 @@ static void symtab_free_fn(void* value, void* user_data) {
 }
 
 // TODO move this
-const hash_ops symtab_hash_ops = {
+const bg3_hash_ops symtab_hash_ops = {
     .hash_fn = symtab_hash_fn,
     .equal_fn = symtab_equal_fn,
     .copy_key_fn = symtab_copy_fn,
     .free_key_fn = symtab_free_fn,
-    .copy_value_fn = hash_default_copy_fn,
-    .free_value_fn = hash_default_free_fn,
+    .copy_value_fn = bg3_hash_default_copy_fn,
+    .free_value_fn = bg3_hash_default_free_fn,
 };
 
 static uint64_t symtab_case_hash_fn(void* key, void* user_data) {
@@ -6809,13 +6877,13 @@ static bool symtab_case_equal_fn(void* lhs, void* rhs, void* user_data) {
 }
 
 // TODO move this
-const hash_ops symtab_case_hash_ops = {
+const bg3_hash_ops symtab_case_hash_ops = {
     .hash_fn = symtab_case_hash_fn,
     .equal_fn = symtab_case_equal_fn,
     .copy_key_fn = symtab_copy_fn,
     .free_key_fn = symtab_free_fn,
-    .copy_value_fn = hash_default_copy_fn,
-    .free_value_fn = hash_default_free_fn,
+    .copy_value_fn = bg3_hash_default_copy_fn,
+    .free_value_fn = bg3_hash_default_free_fn,
 };
 
 typedef enum symtype {
@@ -6831,19 +6899,21 @@ typedef enum reserved_symbol {
   symbol_goal_completed,
 } reserved_symbol;
 
-static bg3_status enter_global(osiris_save_builder* builder,
+static bg3_status enter_global(bg3_osiris_save_builder* builder,
                                char const* name,
                                void* symval) {
-  hash_entry* entry = hash_get_entry(&builder->global_symbols, (void*)name);
+  bg3_hash_entry* entry = bg3_hash_get_entry(&builder->global_symbols, (void*)name);
   if (entry) {
     return bg3_error_failed;
   }
-  hash_set(&builder->global_symbols, (void*)name, symval);
+  bg3_hash_set(&builder->global_symbols, (void*)name, symval);
   return bg3_success;
 }
 
-static bg3_status lookup_global(osiris_save_builder* builder, char* name, void** symval) {
-  hash_entry* entry = hash_get_entry(&builder->global_symbols, name);
+static bg3_status lookup_global(bg3_osiris_save_builder* builder,
+                                char* name,
+                                void** symval) {
+  bg3_hash_entry* entry = bg3_hash_get_entry(&builder->global_symbols, name);
   if (entry) {
     *symval = entry->value;
     return bg3_success;
@@ -6852,17 +6922,21 @@ static bg3_status lookup_global(osiris_save_builder* builder, char* name, void**
   return bg3_error_failed;
 }
 
-static bg3_status enter_local(osiris_save_builder* builder, char* name, void* symval) {
-  hash_entry* entry = hash_get_entry(&builder->local_symbols, name);
+static bg3_status enter_local(bg3_osiris_save_builder* builder,
+                              char* name,
+                              void* symval) {
+  bg3_hash_entry* entry = bg3_hash_get_entry(&builder->local_symbols, name);
   if (entry) {
     return bg3_error_failed;
   }
-  hash_set(&builder->local_symbols, name, symval);
+  bg3_hash_set(&builder->local_symbols, name, symval);
   return bg3_success;
 }
 
-static bg3_status lookup_local(osiris_save_builder* builder, char* name, void** symval) {
-  hash_entry* entry = hash_get_entry(&builder->local_symbols, name);
+static bg3_status lookup_local(bg3_osiris_save_builder* builder,
+                               char* name,
+                               void** symval) {
+  bg3_hash_entry* entry = bg3_hash_get_entry(&builder->local_symbols, name);
   if (entry) {
     *symval = entry->value;
     return bg3_success;
@@ -6871,9 +6945,9 @@ static bg3_status lookup_local(osiris_save_builder* builder, char* name, void** 
   return bg3_error_failed;
 }
 
-static bg3_status enter_function(osiris_save_builder* builder,
+static bg3_status enter_function(bg3_osiris_save_builder* builder,
                                  char* name,
-                                 osiris_function_info* fn) {
+                                 bg3_osiris_function_info* fn) {
   size_t new_index = builder->save.num_functions + 1;
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_function, new_index))) {
     return bg3_error_failed;
@@ -6882,7 +6956,8 @@ static bg3_status enter_function(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static osiris_function_info* lookup_function(osiris_save_builder* builder, char* name) {
+static bg3_osiris_function_info* lookup_function(bg3_osiris_save_builder* builder,
+                                                 char* name) {
   void* symval;
   if (lookup_global(builder, name, &symval) ||
       SYMBOL_TYPE_OF(symval) != symtype_function) {
@@ -6891,9 +6966,9 @@ static osiris_function_info* lookup_function(osiris_save_builder* builder, char*
   return builder->save.functions + (SYMBOL_INDEX_OF(symval) - 1);
 }
 
-static bg3_status enter_type_info(osiris_save_builder* builder,
+static bg3_status enter_type_info(bg3_osiris_save_builder* builder,
                                   char const* name,
-                                  osiris_type_info* ti) {
+                                  bg3_osiris_type_info* ti) {
   size_t new_index = builder->save.num_type_infos + 1;
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_type, new_index))) {
     return bg3_error_failed;
@@ -6902,7 +6977,8 @@ static bg3_status enter_type_info(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static osiris_type_info* lookup_type_info(osiris_save_builder* builder, char* name) {
+static bg3_osiris_type_info* lookup_type_info(bg3_osiris_save_builder* builder,
+                                              char* name) {
   void* symval;
   if (lookup_global(builder, name, &symval) || SYMBOL_TYPE_OF(symval) != symtype_type) {
     return 0;
@@ -6910,9 +6986,9 @@ static osiris_type_info* lookup_type_info(osiris_save_builder* builder, char* na
   return builder->save.type_infos + (SYMBOL_INDEX_OF(symval) - 1);
 }
 
-static bg3_status enter_goal(osiris_save_builder* builder,
+static bg3_status enter_goal(bg3_osiris_save_builder* builder,
                              char* name,
-                             osiris_goal* goal) {
+                             bg3_osiris_goal* goal) {
   size_t new_index = builder->save.num_goals + 1;
   assert(goal->goal_id == new_index);
   if (enter_global(builder, name, MAKE_SYMBOL_VALUE(symtype_goal, new_index))) {
@@ -6922,7 +6998,7 @@ static bg3_status enter_goal(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static osiris_goal* lookup_goal(osiris_save_builder* builder, char* name) {
+static bg3_osiris_goal* lookup_goal(bg3_osiris_save_builder* builder, char* name) {
   void* symval;
   if (lookup_global(builder, name, &symval) || SYMBOL_TYPE_OF(symval) != symtype_goal) {
     return 0;
@@ -6930,22 +7006,22 @@ static osiris_goal* lookup_goal(osiris_save_builder* builder, char* name) {
   return builder->save.goals + (SYMBOL_INDEX_OF(symval) - 1);
 }
 
-static bg3_status enter_variable(osiris_save_builder* builder,
+static bg3_status enter_variable(bg3_osiris_save_builder* builder,
                                  char* name,
                                  uint32_t var_index) {
   return enter_local(builder, name, MAKE_SYMBOL_VALUE(symtype_variable, var_index));
 }
 
-void osiris_save_builder_init(osiris_save_builder* builder) {
-  memset(builder, 0, sizeof(osiris_save_builder));
-  osiris_save_init(&builder->save);
-  hash_init(&builder->global_symbols, &symtab_hash_ops, &builder->save.alloc);
-  hash_init(&builder->local_symbols, &symtab_hash_ops, &builder->save.alloc);
-  osiris_type_info builtin_integer = {.name = "INTEGER", .index = 1};
-  osiris_type_info builtin_integer64 = {.name = "INTEGER64", .index = 2};
-  osiris_type_info builtin_real = {.name = "REAL", .index = 3};
-  osiris_type_info builtin_string = {.name = "STRING", .index = 4};
-  osiris_type_info builtin_guidstring = {.name = "GUIDSTRING", .index = 5};
+void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder) {
+  memset(builder, 0, sizeof(bg3_osiris_save_builder));
+  bg3_osiris_save_init(&builder->save);
+  bg3_hash_init(&builder->global_symbols, &symtab_hash_ops, &builder->save.alloc);
+  bg3_hash_init(&builder->local_symbols, &symtab_hash_ops, &builder->save.alloc);
+  bg3_osiris_type_info builtin_integer = {.name = "INTEGER", .index = 1};
+  bg3_osiris_type_info builtin_integer64 = {.name = "INTEGER64", .index = 2};
+  bg3_osiris_type_info builtin_real = {.name = "REAL", .index = 3};
+  bg3_osiris_type_info builtin_string = {.name = "STRING", .index = 4};
+  bg3_osiris_type_info builtin_guidstring = {.name = "GUIDSTRING", .index = 5};
   enter_global(builder, "INTEGER", MAKE_SYMBOL_VALUE(symtype_type, 1));
   enter_global(builder, "INTEGER64", MAKE_SYMBOL_VALUE(symtype_type, 2));
   enter_global(builder, "REAL", MAKE_SYMBOL_VALUE(symtype_type, 3));
@@ -6956,57 +7032,60 @@ void osiris_save_builder_init(osiris_save_builder* builder) {
   array_push(&builder->save.alloc, &builder->save, type_infos, builtin_real);
   array_push(&builder->save.alloc, &builder->save, type_infos, builtin_string);
   array_push(&builder->save.alloc, &builder->save, type_infos, builtin_guidstring);
-  enter_global(builder, "=", MAKE_SYMBOL_VALUE(symtype_compare, osiris_compare_equal));
+  enter_global(builder, "=",
+               MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_equal));
   enter_global(builder,
-               "!=", MAKE_SYMBOL_VALUE(symtype_compare, osiris_compare_not_equal));
-  enter_global(builder, "<", MAKE_SYMBOL_VALUE(symtype_compare, osiris_compare_less));
+               "!=", MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_not_equal));
+  enter_global(builder, "<", MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_less));
   enter_global(builder,
-               "<=", MAKE_SYMBOL_VALUE(symtype_compare, osiris_compare_less_equal));
-  enter_global(builder, ">", MAKE_SYMBOL_VALUE(symtype_compare, osiris_compare_greater));
-  enter_global(builder,
-               ">=", MAKE_SYMBOL_VALUE(symtype_compare, osiris_compare_greater_equal));
+               "<=", MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_less_equal));
+  enter_global(builder, ">",
+               MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_greater));
+  enter_global(builder, ">=",
+               MAKE_SYMBOL_VALUE(symtype_compare, bg3_osiris_compare_greater_equal));
   enter_global(builder, "GoalCompleted/0",
                MAKE_SYMBOL_VALUE(symtype_reserved, symbol_goal_completed));
 }
 
-void osiris_save_builder_destroy(osiris_save_builder* builder) {
-  osiris_save_destroy(&builder->save);
-  hash_destroy(&builder->global_symbols);
-  hash_destroy(&builder->local_symbols);
-  buffer_destroy(&builder->current_toplevel.text);
-  buffer_destroy(&builder->current_item.text);
+void bg3_osiris_save_builder_destroy(bg3_osiris_save_builder* builder) {
+  bg3_osiris_save_destroy(&builder->save);
+  bg3_hash_destroy(&builder->global_symbols);
+  bg3_hash_destroy(&builder->local_symbols);
+  bg3_buffer_destroy(&builder->current_toplevel.text);
+  bg3_buffer_destroy(&builder->current_item.text);
 }
 
-static bg3_status parse_defun(osiris_save_builder* builder,
-                              sexp_lexer* l,
-                              osiris_function_type type) {
+static bg3_status parse_defun(bg3_osiris_save_builder* builder,
+                              bg3_sexp_lexer* l,
+                              bg3_osiris_function_type type) {
   SLURP(symbol);
   MATCH(symbol);
-  osiris_function_info fn = {.type = type};
-  sexp_token_copy(&builder->current_item, &l->next);
-  fn.name = arena_strdup(&builder->save.alloc, l->next.text.data);
+  bg3_osiris_function_info fn = {.type = type};
+  bg3_sexp_token_copy(&builder->current_item, &l->next);
+  fn.name = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
   fn.line = l->next.line;
   SLURP(symbol);
-  if (type == osiris_function_div_query || type == osiris_function_div_call ||
-      type == osiris_function_event) {
+  if (type == bg3_osiris_function_div_query || type == bg3_osiris_function_div_call ||
+      type == bg3_osiris_function_event) {
     // div opcode
     MATCH(integer);
-    fn.sys_opcode = type == osiris_function_div_call    ? 1
-                    : type == osiris_function_div_query ? 2
-                                                        : 3;
+    fn.sys_opcode = type == bg3_osiris_function_div_call    ? 1
+                    : type == bg3_osiris_function_div_query ? 2
+                                                            : 3;
     fn.div_opcode = l->next.int_val;
     fn.is_external = 1;
     SLURP(integer);
-  } else if (type == osiris_function_sys_query || type == osiris_function_sys_call) {
+  } else if (type == bg3_osiris_function_sys_query ||
+             type == bg3_osiris_function_sys_call) {
     // sys opcode
     MATCH(integer);
     fn.sys_opcode = l->next.int_val;
     SLURP(integer);
   }
-  while (l->next.type != sexp_token_type_rparen) {
-    osiris_type_info* ti;
+  while (l->next.type != bg3_sexp_token_type_rparen) {
+    bg3_osiris_type_info* ti;
     // out param
-    if (l->next.type == sexp_token_type_lparen) {
+    if (l->next.type == bg3_sexp_token_type_lparen) {
       fn.out_mask |= OSIRIS_OUT_PARAM_MASK(fn.num_params);
       SLURP(lparen);
       MATCH(symbol);
@@ -7039,7 +7118,7 @@ static bg3_status parse_defun(osiris_save_builder* builder,
       return bg3_error_failed;
     }
   }
-  buffer_printf(&builder->current_item.text, "/%d", fn.num_params);
+  bg3_buffer_printf(&builder->current_item.text, "/%d", fn.num_params);
   if (enter_function(builder, builder->current_item.text.data, &fn)) {
     fprintf(stderr, "error at line %d: %s already defined\n", fn.line,
             builder->current_item.text.data);
@@ -7049,19 +7128,19 @@ static bg3_status parse_defun(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static bg3_status parse_value(osiris_save_builder* builder,
-                              sexp_lexer* l,
-                              osiris_variant* value) {
-  if (l->next.type == sexp_token_type_string) {
-    value->type = osiris_prim_type_string;
-    value->string = arena_strdup(&builder->save.alloc, l->next.text.data);
+static bg3_status parse_value(bg3_osiris_save_builder* builder,
+                              bg3_sexp_lexer* l,
+                              bg3_osiris_variant* value) {
+  if (l->next.type == bg3_sexp_token_type_string) {
+    value->type = bg3_osiris_prim_type_string;
+    value->string = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
     SLURP(string);
-  } else if (l->next.type == sexp_token_type_decimal) {
-    value->type = osiris_prim_type_real;
+  } else if (l->next.type == bg3_sexp_token_type_decimal) {
+    value->type = bg3_osiris_prim_type_real;
     value->real = l->next.float_val;
     SLURP(decimal);
-  } else if (l->next.type == sexp_token_type_integer) {
-    value->type = osiris_prim_type_integer64;
+  } else if (l->next.type == bg3_sexp_token_type_integer) {
+    value->type = bg3_osiris_prim_type_integer64;
     value->integer64 = l->next.int_val;
     SLURP(integer);
   } else {
@@ -7071,12 +7150,12 @@ static bg3_status parse_value(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static bg3_status parse_argument(osiris_save_builder* builder,
-                                 sexp_lexer* l,
-                                 osiris_binding* arg,
+static bg3_status parse_argument(bg3_osiris_save_builder* builder,
+                                 bg3_sexp_lexer* l,
+                                 bg3_osiris_binding* arg,
                                  bool allow_fresh_vars) {
   bg3_status status = bg3_success;
-  if (l->next.type == sexp_token_type_symbol) {
+  if (l->next.type == bg3_sexp_token_type_symbol) {
     // variables
     if (l->next.text.size == 1 && *l->next.text.data == '_' && allow_fresh_vars) {
       // don't-care vars are output as a grounded undef constant. these can
@@ -7104,7 +7183,7 @@ static bg3_status parse_argument(osiris_save_builder* builder,
         status = enter_variable(builder, l->next.text.data, builder->next_var);
         localsym = MAKE_SYMBOL_VALUE(symtype_variable, builder->next_var);
         assert(!status);
-        osiris_binding* new_var = builder->current_vars + builder->next_var;
+        bg3_osiris_binding* new_var = builder->current_vars + builder->next_var;
         new_var->is_variable = 1;
         new_var->is_variable_again = 1;
         new_var->is_live = 1;
@@ -7119,13 +7198,13 @@ static bg3_status parse_argument(osiris_save_builder* builder,
     SLURP(symbol);
     *arg = builder->current_vars[SYMBOL_INDEX_OF(localsym)];
     return bg3_success;
-  } else if (l->next.type == sexp_token_type_lparen) {
+  } else if (l->next.type == bg3_sexp_token_type_lparen) {
     // cast or enum
     arg->is_grounded = 1;
     arg->is_live = 1;
     SLURP(lparen);
     MATCH(symbol);
-    osiris_type_info* type_info = lookup_type_info(builder, l->next.text.data);
+    bg3_osiris_type_info* type_info = lookup_type_info(builder, l->next.text.data);
     if (!type_info) {
       fprintf(stderr, "undefined type '%s' at line %d\n", l->next.text.data,
               l->next.line);
@@ -7133,7 +7212,7 @@ static bg3_status parse_argument(osiris_save_builder* builder,
     }
     arg->value.index = type_info->index;
     SLURP(symbol);
-    if (l->next.type == sexp_token_type_symbol) {
+    if (l->next.type == bg3_sexp_token_type_symbol) {
       // enum case
       if (!type_info->enum_index) {
         fprintf(stderr,
@@ -7142,7 +7221,7 @@ static bg3_status parse_argument(osiris_save_builder* builder,
                 type_info->name, l->next.line);
         return bg3_error_failed;
       }
-      osiris_enum_info* enum_info = builder->save.enums + (type_info->enum_index - 1);
+      bg3_osiris_enum_info* enum_info = builder->save.enums + (type_info->enum_index - 1);
       bool found = false;
       char* enum_val = 0;
       for (uint32_t i = 0; i < enum_info->num_entries; ++i) {
@@ -7159,7 +7238,7 @@ static bg3_status parse_argument(osiris_save_builder* builder,
                 l->next.text.data, type_info->name, l->next.line);
         return bg3_error_failed;
       }
-      arg->value.type = osiris_prim_type_enum;
+      arg->value.type = bg3_osiris_prim_type_enum;
       arg->value.string = enum_val;
       SLURP(symbol);
     } else {
@@ -7169,17 +7248,17 @@ static bg3_status parse_argument(osiris_save_builder* builder,
     if (!status) {
       SLURP(rparen);
     }
-  } else if (l->next.type == sexp_token_type_string ||
-             l->next.type == sexp_token_type_decimal ||
-             l->next.type == sexp_token_type_integer) {
+  } else if (l->next.type == bg3_sexp_token_type_string ||
+             l->next.type == bg3_sexp_token_type_decimal ||
+             l->next.type == bg3_sexp_token_type_integer) {
     // bare literal
     arg->is_grounded = 1;
     arg->is_live = 1;
     status = parse_value(builder, l, &arg->value);
     // treat bare literals as 32bit. we don't truncate in parse_value so the
     // cast case can use the upper bits
-    if (arg->value.type == osiris_prim_type_integer64) {
-      arg->value.type = osiris_prim_type_integer;
+    if (arg->value.type == bg3_osiris_prim_type_integer64) {
+      arg->value.type = bg3_osiris_prim_type_integer;
       arg->value.integer = (int32_t)arg->value.integer64;
     }
     arg->value.index = arg->value.type;
@@ -7193,22 +7272,23 @@ static bg3_status parse_argument(osiris_save_builder* builder,
   // Make sure the prim type matches the declared type and do implicit
   // literal coercions for alias types.
   assert(arg->value.index != 0);
-  osiris_type_info* resolved = builder->save.type_infos + (arg->value.index - 1);
+  bg3_osiris_type_info* resolved = builder->save.type_infos + (arg->value.index - 1);
   while (resolved->alias_index && !resolved->enum_index) {
     resolved = builder->save.type_infos + (resolved->alias_index - 1);
   }
   // We don't have separate literal syntax for 32/64 integers and GUID
   // strings right now, so implicitly coerce casted literals as needed.
-  if (arg->value.type == osiris_prim_type_string &&
-      resolved->index == osiris_prim_type_guidstring) {
-    arg->value.type = osiris_prim_type_guidstring;
+  if (arg->value.type == bg3_osiris_prim_type_string &&
+      resolved->index == bg3_osiris_prim_type_guidstring) {
+    arg->value.type = bg3_osiris_prim_type_guidstring;
   }
-  if (arg->value.type == osiris_prim_type_integer64 &&
-      resolved->index == osiris_prim_type_integer) {
-    arg->value.type = osiris_prim_type_integer;
+  if (arg->value.type == bg3_osiris_prim_type_integer64 &&
+      resolved->index == bg3_osiris_prim_type_integer) {
+    arg->value.type = bg3_osiris_prim_type_integer;
   }
-  if ((arg->value.type == osiris_prim_type_enum && !resolved->enum_index) ||
-      (arg->value.type != osiris_prim_type_enum && arg->value.type != resolved->index)) {
+  if ((arg->value.type == bg3_osiris_prim_type_enum && !resolved->enum_index) ||
+      (arg->value.type != bg3_osiris_prim_type_enum &&
+       arg->value.type != resolved->index)) {
     // TODO: write a better error message for this. This case can happen if
     // you do e.g. (GUIDSTRING 0) or similar.
     fprintf(stderr, "literal value does not match type at line %d.\n", l->next.line);
@@ -7217,7 +7297,7 @@ static bg3_status parse_argument(osiris_save_builder* builder,
   return status;
 }
 
-static char const* get_type_name(osiris_save_builder* builder, uint16_t index) {
+static char const* get_type_name(bg3_osiris_save_builder* builder, uint16_t index) {
   if (!index) {
     return "undef";
   }
@@ -7227,18 +7307,18 @@ static char const* get_type_name(osiris_save_builder* builder, uint16_t index) {
   return "???";
 }
 
-static bg3_status infer_and_check_types(osiris_save_builder* builder,
-                                        osiris_function_info* predicate,
+static bg3_status infer_and_check_types(bg3_osiris_save_builder* builder,
+                                        bg3_osiris_function_info* predicate,
                                         uint32_t num_bindings,
-                                        osiris_binding* bindings,
+                                        bg3_osiris_binding* bindings,
                                         uint32_t* binding_lines) {
   for (uint32_t i = 0; i < num_bindings; ++i) {
-    osiris_binding* b = bindings + i;
+    bg3_osiris_binding* b = bindings + i;
     if (b->is_variable) {
       // reload variables to propagate changes forward
       *b = builder->current_vars[b->index];
     }
-    osiris_type_info* ti = builder->save.type_infos + (predicate->params[i] - 1);
+    bg3_osiris_type_info* ti = builder->save.type_infos + (predicate->params[i] - 1);
     // If the types are compatible, we're done here. We consider types
     // compatible if either:
     // 1. They are identical
@@ -7247,10 +7327,10 @@ static bg3_status infer_and_check_types(osiris_save_builder* builder,
     // conversions to happen but not e.g. CHARACTER->ROOT. In general, I
     // really don't like this, but I don't see anywhere in the save format
     // that type conversions are actually treated explicitly...
-    osiris_type_info* resolved_binding =
+    bg3_osiris_type_info* resolved_binding =
         b->value.index ? builder->save.type_infos + (b->value.index - 1) : 0;
     bool found_match = false;
-    osiris_type_info* resolved = ti;
+    bg3_osiris_type_info* resolved = ti;
     while (resolved->alias_index) {
       resolved = builder->save.type_infos + (resolved->alias_index - 1);
       if (resolved->index == b->value.index) {
@@ -7281,8 +7361,8 @@ static bg3_status infer_and_check_types(osiris_save_builder* builder,
     // A variable or don't-care we haven't seen yet, assign its type.
     b->value.index = ti->index;
     if (b->is_variable) {
-      b->value.type =
-          (osiris_prim_type)(ti->enum_index ? osiris_prim_type_enum : resolved->index);
+      b->value.type = (bg3_osiris_prim_type)(ti->enum_index ? bg3_osiris_prim_type_enum
+                                                            : resolved->index);
       // write back changes to variables to propagate forward
       builder->current_vars[b->index] = *b;
     }
@@ -7293,15 +7373,15 @@ static bg3_status infer_and_check_types(osiris_save_builder* builder,
 typedef struct action_list {
   uint32_t num_actions;
   uint32_t cap_actions;
-  osiris_action* actions;
+  bg3_osiris_action* actions;
 } action_list;
 
-static bg3_status parse_action_list(osiris_save_builder* builder,
-                                    sexp_lexer* l,
+static bg3_status parse_action_list(bg3_osiris_save_builder* builder,
+                                    bg3_sexp_lexer* l,
                                     action_list* alist) {
   bg3_status status = bg3_success;
-  while (!status && l->next.type != sexp_token_type_rparen) {
-    osiris_action action = {};
+  while (!status && l->next.type != bg3_sexp_token_type_rparen) {
+    bg3_osiris_action action = {};
     uint32_t binding_lines[OSIRIS_MAX_LOCALS];
     void* symval;
     SLURP(lparen);
@@ -7311,10 +7391,10 @@ static bg3_status parse_action_list(osiris_save_builder* builder,
       SLURP(symbol);
       MATCH(symbol);
     }
-    sexp_token_copy(&builder->current_item, &l->next);
+    bg3_sexp_token_copy(&builder->current_item, &l->next);
     SLURP(symbol);
-    while (!status && l->next.type != sexp_token_type_rparen) {
-      osiris_binding binding = {};
+    while (!status && l->next.type != bg3_sexp_token_type_rparen) {
+      bg3_osiris_binding binding = {};
       if (action.num_arguments == OSIRIS_MAX_LOCALS) {
         fprintf(stderr, "too many arguments at line %d\n", l->next.line);
         return bg3_error_failed;
@@ -7328,7 +7408,7 @@ static bg3_status parse_action_list(osiris_save_builder* builder,
     if (status) {
       return status;
     }
-    buffer_printf(&builder->current_item.text, "/%d", action.num_arguments);
+    bg3_buffer_printf(&builder->current_item.text, "/%d", action.num_arguments);
     if ((status = lookup_global(builder, builder->current_item.text.data, &symval))) {
       fprintf(stderr, "undefined symbol '%s' at line %d\n",
               builder->current_item.text.data, builder->current_item.line);
@@ -7347,7 +7427,8 @@ static bg3_status parse_action_list(osiris_save_builder* builder,
               builder->current_item.text.data, builder->current_item.line);
       return bg3_error_failed;
     } else {
-      osiris_function_info* fn = builder->save.functions + (SYMBOL_INDEX_OF(symval) - 1);
+      bg3_osiris_function_info* fn =
+          builder->save.functions + (SYMBOL_INDEX_OF(symval) - 1);
       if ((status = infer_and_check_types(builder, fn, action.num_arguments,
                                           action.arguments, binding_lines))) {
         return bg3_error_failed;
@@ -7374,18 +7455,18 @@ typedef struct condition {
   condition_type type;
   uint32_t line;
   uint32_t num_bindings;
-  osiris_binding bindings[OSIRIS_MAX_LOCALS];
+  bg3_osiris_binding bindings[OSIRIS_MAX_LOCALS];
   uint32_t binding_lines[OSIRIS_MAX_LOCALS];
   bool debug_copied_down[OSIRIS_MAX_LOCALS];
   bool negated;
-  osiris_compare_op compare_op;
-  osiris_function_info* predicate;
+  bg3_osiris_compare_op compare_op;
+  bg3_osiris_function_info* predicate;
   uint32_t node_id;
   bool root_is_query;
 } condition;
 
-static bg3_status parse_condition(osiris_save_builder* builder,
-                                  sexp_lexer* l,
+static bg3_status parse_condition(bg3_osiris_save_builder* builder,
+                                  bg3_sexp_lexer* l,
                                   condition* cond) {
   bg3_status status = bg3_success;
   cond->line = l->next.line;
@@ -7395,7 +7476,7 @@ static bg3_status parse_condition(osiris_save_builder* builder,
   if (!lookup_global(builder, l->next.text.data, &symval) &&
       SYMBOL_TYPE_OF(symval) == symtype_compare) {
     cond->type = condition_compare;
-    cond->compare_op = (osiris_compare_op)SYMBOL_INDEX_OF(symval);
+    cond->compare_op = (bg3_osiris_compare_op)SYMBOL_INDEX_OF(symval);
   } else {
     if (!strcmp(l->next.text.data, "not")) {
       SLURP(symbol);
@@ -7403,10 +7484,10 @@ static bg3_status parse_condition(osiris_save_builder* builder,
       cond->negated = true;
     }
     cond->type = condition_trigger;
-    sexp_token_copy(&builder->current_item, &l->next);
+    bg3_sexp_token_copy(&builder->current_item, &l->next);
   }
   SLURP(symbol);
-  while (!status && l->next.type != sexp_token_type_rparen) {
+  while (!status && l->next.type != bg3_sexp_token_type_rparen) {
     if (cond->num_bindings == OSIRIS_MAX_LOCALS) {
       fprintf(stderr, "too many arguments to condition at line %d\n", l->next.line);
       return bg3_error_failed;
@@ -7424,7 +7505,7 @@ static bg3_status parse_condition(osiris_save_builder* builder,
     return status;
   }
   if (cond->type == condition_trigger) {
-    buffer_printf(&builder->current_item.text, "/%d", cond->num_bindings);
+    bg3_buffer_printf(&builder->current_item.text, "/%d", cond->num_bindings);
     cond->predicate = lookup_function(builder, builder->current_item.text.data);
     if (!cond->predicate) {
       fprintf(stderr, "undefined predicate '%s' at line %d\n",
@@ -7440,23 +7521,23 @@ static bg3_status parse_condition(osiris_save_builder* builder,
   return status;
 }
 
-static bool is_valid_trigger(osiris_function_info* fn) {
-  return fn->type == osiris_function_event || fn->type == osiris_function_db ||
-         fn->type == osiris_function_proc || fn->type == osiris_function_query;
+static bool is_valid_trigger(bg3_osiris_function_info* fn) {
+  return fn->type == bg3_osiris_function_event || fn->type == bg3_osiris_function_db ||
+         fn->type == bg3_osiris_function_proc || fn->type == bg3_osiris_function_query;
 }
 
-static bg3_status ensure_entry_node(osiris_save_builder* builder,
+static bg3_status ensure_entry_node(bg3_osiris_save_builder* builder,
                                     condition* cond,
                                     bool is_left_root) {
-  osiris_rete_node node = {};
+  bg3_osiris_rete_node node = {};
   node.name = cond->predicate->name;
   node.node_id = builder->save.num_rete_nodes + 1;
   node.arity = cond->predicate->num_params;
   switch (cond->predicate->type) {
-    case osiris_function_event:
-      node.type = osiris_rete_node_event;
+    case bg3_osiris_function_event:
+      node.type = bg3_osiris_rete_node_event;
       break;
-    case osiris_function_div_query:
+    case bg3_osiris_function_div_query:
       if (is_left_root) {
         fprintf(stderr,
                 "DIV queries may not occur as the first condition of a rule at "
@@ -7464,26 +7545,26 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
                 cond->line);
         return bg3_error_failed;
       }
-      node.type = osiris_rete_node_div_query;
+      node.type = bg3_osiris_rete_node_div_query;
       break;
-    case osiris_function_div_call:
+    case bg3_osiris_function_div_call:
       fprintf(stderr,
               "DIV calls may only occur in the action list of a rule at line %d\n",
               cond->line);
       return bg3_error_failed;
-    case osiris_function_db:
-      node.type = osiris_rete_node_db;
+    case bg3_osiris_function_db:
+      node.type = bg3_osiris_rete_node_db;
       break;
-    case osiris_function_proc:
+    case bg3_osiris_function_proc:
       if (!is_left_root) {
         fprintf(stderr,
                 "proc may only occur as the first condition of a rule at line %d\n",
                 cond->line);
         return bg3_error_failed;
       }
-      node.type = osiris_rete_node_event;
+      node.type = bg3_osiris_rete_node_event;
       break;
-    case osiris_function_sys_query:
+    case bg3_osiris_function_sys_query:
       if (is_left_root) {
         fprintf(stderr,
                 "Osiris internal queries may not occur as the first condition of "
@@ -7492,21 +7573,21 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
                 cond->line);
         return bg3_error_failed;
       }
-      node.type = osiris_rete_node_sys_query;
+      node.type = bg3_osiris_rete_node_sys_query;
       break;
-    case osiris_function_sys_call:
+    case bg3_osiris_function_sys_call:
       fprintf(stderr,
               "Osiris internal calls may only occur in the action list of a rule "
               "at line "
               "%d\n",
               cond->line);
       return bg3_error_failed;
-    case osiris_function_query:
+    case bg3_osiris_function_query:
       if (is_left_root) {
-        node.type = osiris_rete_node_event;
+        node.type = bg3_osiris_rete_node_event;
         cond->root_is_query = true;
       } else {
-        node.type = osiris_rete_node_query;
+        node.type = bg3_osiris_rete_node_query;
       }
       break;
     default:
@@ -7514,13 +7595,13 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
   }
   // we check this after validating to ensure that invalid usage is caught.
   if (!cond->predicate->rete_node) {
-    if (node.type == osiris_rete_node_db) {
-      osiris_rete_db db = {};
+    if (node.type == bg3_osiris_rete_node_db) {
+      bg3_osiris_rete_db db = {};
       node.db = builder->save.num_dbs + 1;
       db.db_id = node.db;
       db.num_schema_columns = cond->predicate->num_params;
       size_t sz = db.num_schema_columns * sizeof(uint16_t);
-      db.schema_columns = (uint16_t*)arena_alloc(&builder->save.alloc, sz);
+      db.schema_columns = (uint16_t*)bg3_arena_alloc(&builder->save.alloc, sz);
       memcpy(db.schema_columns, cond->predicate->params, sz);
       array_push(&builder->save.alloc, &builder->save, dbs, db);
     }
@@ -7532,19 +7613,19 @@ static bg3_status ensure_entry_node(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static uint32_t create_adaptor(osiris_save_builder* builder,
+static uint32_t create_adaptor(bg3_osiris_save_builder* builder,
                                condition* parent,
                                condition* output) {
-  osiris_rete_adaptor adaptor = {
+  bg3_osiris_rete_adaptor adaptor = {
       .adaptor_id = builder->save.num_rete_adaptors + 1,
       .num_vars = parent->num_bindings,
-      .vars = (uint8_t*)arena_alloc(&builder->save.alloc, parent->num_bindings),
+      .vars = (uint8_t*)bg3_arena_alloc(&builder->save.alloc, parent->num_bindings),
   };
   for (uint32_t i = 0; i < parent->num_bindings; ++i) {
-    osiris_binding* b = parent->bindings + i;
+    bg3_osiris_binding* b = parent->bindings + i;
     if (!b->is_variable) {
       adaptor.vars[i] = 255;
-      if (b->value.type != osiris_prim_type_undef) {
+      if (b->value.type != bg3_osiris_prim_type_undef) {
         adaptor.num_values++;
       }
     } else {
@@ -7556,16 +7637,16 @@ static uint32_t create_adaptor(osiris_save_builder* builder,
       output->debug_copied_down[b->index] = true;
     }
   }
-  adaptor.values = (osiris_rete_adaptor_value*)arena_calloc(
-      &builder->save.alloc, adaptor.num_values, sizeof(osiris_rete_adaptor_value));
-  adaptor.pairs = (osiris_rete_adaptor_pair*)arena_calloc(
-      &builder->save.alloc, adaptor.num_pairs, sizeof(osiris_rete_adaptor_pair));
+  adaptor.values = (bg3_osiris_rete_adaptor_value*)bg3_arena_calloc(
+      &builder->save.alloc, adaptor.num_values, sizeof(bg3_osiris_rete_adaptor_value));
+  adaptor.pairs = (bg3_osiris_rete_adaptor_pair*)bg3_arena_calloc(
+      &builder->save.alloc, adaptor.num_pairs, sizeof(bg3_osiris_rete_adaptor_pair));
   uint32_t next_value = 0;
   uint32_t next_pair = 0;
   for (uint32_t i = 0; i < parent->num_bindings; ++i) {
-    osiris_binding* b = parent->bindings + i;
+    bg3_osiris_binding* b = parent->bindings + i;
     if (!b->is_variable) {
-      if (b->value.type != osiris_prim_type_undef) {
+      if (b->value.type != bg3_osiris_prim_type_undef) {
         adaptor.values[next_value].index = i;
         adaptor.values[next_value].value = b->value;
         next_value++;
@@ -7580,30 +7661,30 @@ static uint32_t create_adaptor(osiris_save_builder* builder,
   return adaptor.adaptor_id;
 }
 
-static void link_parent(osiris_save_builder* builder,
+static void link_parent(bg3_osiris_save_builder* builder,
                         condition* cond,
-                        osiris_rete_node* node,
-                        osiris_edge_direction dir) {
-  osiris_rete_node_edge edge = {
+                        bg3_osiris_rete_node* node,
+                        bg3_osiris_edge_direction dir) {
+  bg3_osiris_rete_node_edge edge = {
       .node_id = node->node_id,
       .direction = dir,
       .goal_id = builder->current_goal_id,
   };
   assert(cond->node_id);
-  osiris_rete_node* parent = builder->save.rete_nodes + (cond->node_id - 1);
+  bg3_osiris_rete_node* parent = builder->save.rete_nodes + (cond->node_id - 1);
   switch (parent->type) {
-    case osiris_rete_node_db:
-    case osiris_rete_node_event:
-    case osiris_rete_node_div_query:
-    case osiris_rete_node_sys_query:
-    case osiris_rete_node_query:
+    case bg3_osiris_rete_node_db:
+    case bg3_osiris_rete_node_event:
+    case bg3_osiris_rete_node_div_query:
+    case bg3_osiris_rete_node_sys_query:
+    case bg3_osiris_rete_node_query:
       array_push(&builder->save.alloc, &parent->trigger, children, edge);
       break;
-    case osiris_rete_node_join_and:
-    case osiris_rete_node_join_and_not:
+    case bg3_osiris_rete_node_join_and:
+    case bg3_osiris_rete_node_join_and_not:
       parent->join.child = edge;
       break;
-    case osiris_rete_node_compare:
+    case bg3_osiris_rete_node_compare:
       parent->compare.child = edge;
       break;
     default:
@@ -7611,15 +7692,15 @@ static void link_parent(osiris_save_builder* builder,
   }
 }
 
-static void create_temp_db(osiris_save_builder* builder,
+static void create_temp_db(bg3_osiris_save_builder* builder,
                            condition* cond,
-                           osiris_rete_node* node) {
-  osiris_rete_db db = {};
+                           bg3_osiris_rete_node* node) {
+  bg3_osiris_rete_db db = {};
   node->db = builder->save.num_dbs + 1;
   db.db_id = node->db;
   db.num_schema_columns = cond->num_bindings;
   size_t sz = db.num_schema_columns * sizeof(uint16_t);
-  db.schema_columns = (uint16_t*)arena_alloc(&builder->save.alloc, sz);
+  db.schema_columns = (uint16_t*)bg3_arena_alloc(&builder->save.alloc, sz);
   for (uint32_t i = 0; i < cond->num_bindings; ++i) {
     assert(cond->bindings[i].value.index != 0);
     db.schema_columns[i] = cond->bindings[i].value.index;
@@ -7634,12 +7715,12 @@ static void create_temp_db(osiris_save_builder* builder,
 // forward pass version at some point?
 //
 // It's also just generically nightmare fuel that needs to be simplified =/
-static int8_t calc_db_distance(osiris_save* save,
-                               osiris_rete_node* node,
-                               osiris_rete_node_edge* edge,
+static int8_t calc_db_distance(bg3_osiris_save* save,
+                               bg3_osiris_rete_node* node,
+                               bg3_osiris_rete_node_edge* edge,
                                uint32_t* db_node) {
   if (!node) {
-    *edge = (osiris_rete_node_edge){};
+    *edge = (bg3_osiris_rete_node_edge){};
     *db_node = 0;
     return -1;
   }
@@ -7647,10 +7728,10 @@ static int8_t calc_db_distance(osiris_save* save,
     *db_node = node->node_id;
     return 0;
   }
-  osiris_rete_node_edge left_edge, right_edge;
+  bg3_osiris_rete_node_edge left_edge, right_edge;
   uint32_t left_db, right_db;
-  osiris_rete_node* lp = get_left_parent_node(save, node);
-  osiris_rete_node* rp = get_right_parent_node(save, node);
+  bg3_osiris_rete_node* lp = get_left_parent_node(save, node);
+  bg3_osiris_rete_node* rp = get_right_parent_node(save, node);
   int8_t lp_dist = calc_db_distance(save, lp, &left_edge, &left_db);
   int8_t rp_dist = calc_db_distance(save, rp, &right_edge, &right_db);
   if (lp_dist > -1) {
@@ -7661,7 +7742,7 @@ static int8_t calc_db_distance(osiris_save* save,
     if (rp_dist < lp_dist) {
       if (rp_dist == 1) {
         edge->node_id = node->node_id;
-        edge->direction = osiris_edge_direction_right;
+        edge->direction = bg3_osiris_edge_direction_right;
       } else {
         *edge = right_edge;
       }
@@ -7671,10 +7752,10 @@ static int8_t calc_db_distance(osiris_save* save,
   }
   if (lp_dist == 1) {
     edge->node_id = node->node_id;
-    edge->direction = node->type == osiris_rete_node_join_and ||
-                              node->type == osiris_rete_node_join_and_not
-                          ? osiris_edge_direction_left
-                          : osiris_edge_direction_none;
+    edge->direction = node->type == bg3_osiris_rete_node_join_and ||
+                              node->type == bg3_osiris_rete_node_join_and_not
+                          ? bg3_osiris_edge_direction_left
+                          : bg3_osiris_edge_direction_none;
   } else {
     *edge = left_edge;
   }
@@ -7682,17 +7763,17 @@ static int8_t calc_db_distance(osiris_save* save,
   return lp_dist;
 }
 
-static void calc_db_edges(osiris_save_builder* builder,
-                          osiris_rete_node* node,
+static void calc_db_edges(bg3_osiris_save_builder* builder,
+                          bg3_osiris_rete_node* node,
                           uint32_t* left_db,
-                          osiris_rete_node_edge* left_edge,
+                          bg3_osiris_rete_node_edge* left_edge,
                           int8_t* left_distance,
                           uint32_t* right_db,
-                          osiris_rete_node_edge* right_edge,
+                          bg3_osiris_rete_node_edge* right_edge,
                           int8_t* right_distance) {
-  osiris_save* save = &builder->save;
+  bg3_osiris_save* save = &builder->save;
   uint32_t dummy_db;
-  osiris_rete_node_edge dummy_edge;
+  bg3_osiris_rete_node_edge dummy_edge;
   int8_t dummy_distance;
   if (!right_db) {
     right_db = &dummy_db;
@@ -7706,18 +7787,19 @@ static void calc_db_edges(osiris_save_builder* builder,
   *left_db = *right_db = 0;
   if (node->db) {
     *left_distance = *right_distance = 0;
-    *left_edge = *right_edge = (osiris_rete_node_edge){};
+    *left_edge = *right_edge = (bg3_osiris_rete_node_edge){};
     return;
   }
-  bool is_binary = node->type == osiris_rete_node_join_and ||
-                   node->type == osiris_rete_node_join_and_not;
-  *left_edge = (osiris_rete_node_edge){
-      .node_id = node->node_id,
-      .direction = is_binary ? osiris_edge_direction_left : osiris_edge_direction_none,
-      .goal_id = builder->current_goal_id};
-  *right_edge = (osiris_rete_node_edge){.node_id = node->node_id,
-                                        .direction = osiris_edge_direction_right,
-                                        .goal_id = builder->current_goal_id};
+  bool is_binary = node->type == bg3_osiris_rete_node_join_and ||
+                   node->type == bg3_osiris_rete_node_join_and_not;
+  *left_edge =
+      (bg3_osiris_rete_node_edge){.node_id = node->node_id,
+                                  .direction = is_binary ? bg3_osiris_edge_direction_left
+                                                         : bg3_osiris_edge_direction_none,
+                                  .goal_id = builder->current_goal_id};
+  *right_edge = (bg3_osiris_rete_node_edge){.node_id = node->node_id,
+                                            .direction = bg3_osiris_edge_direction_right,
+                                            .goal_id = builder->current_goal_id};
   *left_distance =
       calc_db_distance(save, get_left_parent_node(save, node), left_edge, left_db);
   *right_distance =
@@ -7732,8 +7814,8 @@ static void calc_db_edges(osiris_save_builder* builder,
   }
 }
 
-static bg3_status create_terminal_node(osiris_save_builder* builder,
-                                       sexp_lexer* l,
+static bg3_status create_terminal_node(bg3_osiris_save_builder* builder,
+                                       bg3_sexp_lexer* l,
                                        condition* last) {
   assert(last->node_id);
   condition terminal_cond = {
@@ -7742,21 +7824,21 @@ static bg3_status create_terminal_node(osiris_save_builder* builder,
       .node_id = builder->save.num_rete_nodes + 1,
       .root_is_query = last->root_is_query,
   };
-  osiris_rete_node node = {
-      .type = osiris_rete_node_terminal,
+  bg3_osiris_rete_node node = {
+      .type = bg3_osiris_rete_node_terminal,
       .node_id = terminal_cond.node_id,
       .terminal.parent.node_id = last->node_id,
       .terminal.parent.adaptor = create_adaptor(builder, last, &terminal_cond),
       .terminal.line = l->next.line,
       .terminal.is_query = last->root_is_query,
   };
-  link_parent(builder, last, &node, osiris_edge_direction_none);
+  link_parent(builder, last, &node, bg3_osiris_edge_direction_none);
   node.terminal.num_vars = builder->next_var;
-  size_t sz = sizeof(osiris_binding) * builder->next_var;
-  node.terminal.vars = (osiris_binding*)arena_alloc(&builder->save.alloc, sz);
+  size_t sz = sizeof(bg3_osiris_binding) * builder->next_var;
+  node.terminal.vars = (bg3_osiris_binding*)bg3_arena_alloc(&builder->save.alloc, sz);
   memcpy(node.terminal.vars, builder->current_vars, sz);
   memcpy(terminal_cond.bindings, builder->current_vars, sz);
-  osiris_rete_node* parent = builder->save.rete_nodes + (last->node_id - 1);
+  bg3_osiris_rete_node* parent = builder->save.rete_nodes + (last->node_id - 1);
   if (parent->db && terminal_cond.num_bindings) {
     create_temp_db(builder, &terminal_cond, &node);
   }
@@ -7768,8 +7850,8 @@ static bg3_status create_terminal_node(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static bg3_status create_compare_node(osiris_save_builder* builder,
-                                      sexp_lexer* l,
+static bg3_status create_compare_node(bg3_osiris_save_builder* builder,
+                                      bg3_sexp_lexer* l,
                                       condition* prev,
                                       condition* comp) {
   // This is a bit weird. We're turning a condition node into a condition node
@@ -7784,21 +7866,21 @@ static bg3_status create_compare_node(osiris_save_builder* builder,
       .root_is_query = prev->root_is_query,
   };
   assert(comp->num_bindings == 2);
-  osiris_rete_node node = {
-      .type = osiris_rete_node_compare,
+  bg3_osiris_rete_node node = {
+      .type = bg3_osiris_rete_node_compare,
       .node_id = compare_cond.node_id,
       .compare.parent.node_id = prev->node_id,
       .compare.parent.adaptor = create_adaptor(builder, prev, &compare_cond),
       .compare.opcode = comp->compare_op,
       .compare.left_var = comp->bindings[0].is_variable ? comp->bindings[0].index : 255,
       .compare.right_var = comp->bindings[1].is_variable ? comp->bindings[1].index : 255,
-      .compare.left_value =
-          comp->bindings[0].is_variable ? (osiris_variant){} : comp->bindings[0].value,
-      .compare.right_value =
-          comp->bindings[1].is_variable ? (osiris_variant){} : comp->bindings[1].value,
+      .compare.left_value = comp->bindings[0].is_variable ? (bg3_osiris_variant){}
+                                                          : comp->bindings[0].value,
+      .compare.right_value = comp->bindings[1].is_variable ? (bg3_osiris_variant){}
+                                                           : comp->bindings[1].value,
   };
-  link_parent(builder, prev, &node, osiris_edge_direction_none);
-  osiris_rete_node* parent = builder->save.rete_nodes + (prev->node_id - 1);
+  link_parent(builder, prev, &node, bg3_osiris_edge_direction_none);
+  bg3_osiris_rete_node* parent = builder->save.rete_nodes + (prev->node_id - 1);
   if (parent->db && compare_cond.num_bindings) {
     create_temp_db(builder, &compare_cond, &node);
   }
@@ -7809,8 +7891,8 @@ static bg3_status create_compare_node(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static bg3_status create_join_node(osiris_save_builder* builder,
-                                   sexp_lexer* l,
+static bg3_status create_join_node(bg3_osiris_save_builder* builder,
+                                   bg3_sexp_lexer* l,
                                    condition* left,
                                    condition* right) {
   bg3_status status = bg3_success;
@@ -7826,18 +7908,19 @@ static bg3_status create_join_node(osiris_save_builder* builder,
       .negated = right->negated,
       .root_is_query = left->root_is_query,
   };
-  osiris_rete_node node = {
-      .type = right->negated ? osiris_rete_node_join_and_not : osiris_rete_node_join_and,
+  bg3_osiris_rete_node node = {
+      .type = right->negated ? bg3_osiris_rete_node_join_and_not
+                             : bg3_osiris_rete_node_join_and,
       .node_id = join_cond.node_id,
       .join.left_parent.node_id = left->node_id,
       .join.left_parent.adaptor = create_adaptor(builder, left, &join_cond),
       .join.right_parent.node_id = right->node_id,
       .join.right_parent.adaptor = create_adaptor(builder, right, &join_cond),
   };
-  link_parent(builder, left, &node, osiris_edge_direction_left);
-  link_parent(builder, right, &node, osiris_edge_direction_right);
-  osiris_rete_node* left_parent = builder->save.rete_nodes + (left->node_id - 1);
-  osiris_rete_node* right_parent = builder->save.rete_nodes + (right->node_id - 1);
+  link_parent(builder, left, &node, bg3_osiris_edge_direction_left);
+  link_parent(builder, right, &node, bg3_osiris_edge_direction_right);
+  bg3_osiris_rete_node* left_parent = builder->save.rete_nodes + (left->node_id - 1);
+  bg3_osiris_rete_node* right_parent = builder->save.rete_nodes + (right->node_id - 1);
   if (left_parent->db && right_parent->db && join_cond.num_bindings) {
     create_temp_db(builder, &join_cond, &node);
   }
@@ -7850,8 +7933,8 @@ static bg3_status create_join_node(osiris_save_builder* builder,
   return bg3_success;
 }
 
-static bg3_status consume_outputs(osiris_save_builder* builder,
-                                  sexp_lexer* l,
+static bg3_status consume_outputs(bg3_osiris_save_builder* builder,
+                                  bg3_sexp_lexer* l,
                                   condition* prev,
                                   condition* next) {
   bg3_status status = bg3_success;
@@ -7883,15 +7966,15 @@ static bg3_status consume_outputs(osiris_save_builder* builder,
   return status;
 }
 
-static bg3_status parse_rule(osiris_save_builder* builder, sexp_lexer* l) {
+static bg3_status parse_rule(bg3_osiris_save_builder* builder, bg3_sexp_lexer* l) {
   action_list body = {};
   bg3_status status = bg3_success;
-  hash_clear(&builder->local_symbols);
+  bg3_hash_clear(&builder->local_symbols);
   memset(builder->current_vars, 0, sizeof(builder->current_vars));
   builder->next_var = 0;
   SLURP(lparen);
   condition prev = {};
-  while (!status && l->next.type != sexp_token_type_rparen) {
+  while (!status && l->next.type != bg3_sexp_token_type_rparen) {
     condition next = {};
     if ((status = parse_condition(builder, l, &next))) {
       return status;
@@ -7908,34 +7991,34 @@ static bg3_status parse_rule(osiris_save_builder* builder, sexp_lexer* l) {
   if ((status = parse_action_list(builder, l, &body))) {
     return status;
   }
-  osiris_rete_node* terminal_node = builder->save.rete_nodes + (prev.node_id - 1);
+  bg3_osiris_rete_node* terminal_node = builder->save.rete_nodes + (prev.node_id - 1);
   terminal_node->terminal.num_actions = body.num_actions;
   terminal_node->terminal.actions = body.actions;
   return bg3_success;
 }
 
-static bg3_status parse_goal(osiris_save_builder* builder, sexp_lexer* l) {
-  osiris_goal goal = {};
+static bg3_status parse_goal(bg3_osiris_save_builder* builder, bg3_sexp_lexer* l) {
+  bg3_osiris_goal goal = {};
   action_list init_actions = {};
   action_list exit_actions = {};
   bg3_status status = bg3_success;
   SLURP(symbol);
   SLURP(lparen);
   MATCH(symbol);
-  sexp_token_copy(&builder->current_toplevel, &l->next);
-  goal.name = arena_strdup(&builder->save.alloc, l->next.text.data);
+  bg3_sexp_token_copy(&builder->current_toplevel, &l->next);
+  goal.name = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
   goal.goal_id = builder->current_goal_id = builder->save.num_goals + 1;
   goal.line = l->next.line;
   SLURP(symbol);
   MATCH(symbol);
   if (!strcmp(l->next.text.data, "active")) {
-    goal.state = osiris_goal_state_active;
+    goal.state = bg3_osiris_goal_state_active;
   } else if (!strcmp(l->next.text.data, "sleeping")) {
-    goal.state = osiris_goal_state_sleeping;
+    goal.state = bg3_osiris_goal_state_sleeping;
   } else if (!strcmp(l->next.text.data, "exited")) {
-    goal.state =
-        (osiris_goal_state)(osiris_goal_state_sleeping | osiris_goal_state_finalised |
-                            osiris_goal_state_completed);
+    goal.state = (bg3_osiris_goal_state)(bg3_osiris_goal_state_sleeping |
+                                         bg3_osiris_goal_state_finalised |
+                                         bg3_osiris_goal_state_completed);
   } else {
     fprintf(stderr, "invalid goal state '%s' at line %d\n", l->next.text.data,
             l->next.line);
@@ -7944,9 +8027,9 @@ static bg3_status parse_goal(osiris_save_builder* builder, sexp_lexer* l) {
   SLURP(symbol);
   MATCH(symbol);
   if (!strcmp(l->next.text.data, "or")) {
-    goal.combiner = osiris_goal_combiner_or;
+    goal.combiner = bg3_osiris_goal_combiner_or;
   } else if (!strcmp(l->next.text.data, "and")) {
-    goal.combiner = osiris_goal_combiner_and;
+    goal.combiner = bg3_osiris_goal_combiner_and;
   } else {
     fprintf(stderr, "invalid subgoal combination '%s' at line %d\n", l->next.text.data,
             l->next.line);
@@ -7954,7 +8037,7 @@ static bg3_status parse_goal(osiris_save_builder* builder, sexp_lexer* l) {
   }
   SLURP(symbol);
   SLURP(rparen);
-  while (!status && l->next.type != sexp_token_type_rparen) {
+  while (!status && l->next.type != bg3_sexp_token_type_rparen) {
     SLURP(lparen);
     MATCH(symbol);
     if (!strcmp(l->next.text.data, "init")) {
@@ -7974,7 +8057,7 @@ static bg3_status parse_goal(osiris_save_builder* builder, sexp_lexer* l) {
       }
       SLURP(symbol);
       MATCH(symbol);
-      goal.unresolved_parent = arena_strdup(&builder->save.alloc, l->next.text.data);
+      goal.unresolved_parent = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
       SLURP(symbol);
       SLURP(rparen);
     } else {
@@ -7997,34 +8080,34 @@ static bg3_status parse_goal(osiris_save_builder* builder, sexp_lexer* l) {
   return status;
 }
 
-static bg3_status parse_toplevel(osiris_save_builder* builder, sexp_lexer* l) {
+static bg3_status parse_toplevel(bg3_osiris_save_builder* builder, bg3_sexp_lexer* l) {
   SLURP(lparen);
   MATCH(symbol);
   bg3_status status = bg3_success;
   if (!strcmp(l->next.text.data, "defgoal")) {
     status = parse_goal(builder, l);
   } else if (!strcmp(l->next.text.data, "defdb")) {
-    status = parse_defun(builder, l, osiris_function_db);
+    status = parse_defun(builder, l, bg3_osiris_function_db);
   } else if (!strcmp(l->next.text.data, "defproc")) {
-    status = parse_defun(builder, l, osiris_function_proc);
+    status = parse_defun(builder, l, bg3_osiris_function_proc);
   } else if (!strcmp(l->next.text.data, "defquery")) {
-    status = parse_defun(builder, l, osiris_function_query);
+    status = parse_defun(builder, l, bg3_osiris_function_query);
   } else if (!strcmp(l->next.text.data, "defevent")) {
-    status = parse_defun(builder, l, osiris_function_event);
+    status = parse_defun(builder, l, bg3_osiris_function_event);
   } else if (!strcmp(l->next.text.data, "defdivcall")) {
-    status = parse_defun(builder, l, osiris_function_div_call);
+    status = parse_defun(builder, l, bg3_osiris_function_div_call);
   } else if (!strcmp(l->next.text.data, "defdivquery")) {
-    status = parse_defun(builder, l, osiris_function_div_query);
+    status = parse_defun(builder, l, bg3_osiris_function_div_query);
   } else if (!strcmp(l->next.text.data, "defsyscall")) {
-    status = parse_defun(builder, l, osiris_function_sys_call);
+    status = parse_defun(builder, l, bg3_osiris_function_sys_call);
   } else if (!strcmp(l->next.text.data, "defsysquery")) {
-    status = parse_defun(builder, l, osiris_function_sys_query);
+    status = parse_defun(builder, l, bg3_osiris_function_sys_query);
   } else if (!strcmp(l->next.text.data, "deftype")) {
-    osiris_type_info type_info = {};
-    osiris_type_info* alias_type;
+    bg3_osiris_type_info type_info = {};
+    bg3_osiris_type_info* alias_type;
     SLURP(symbol);
     MATCH(symbol);
-    type_info.name = arena_strdup(&builder->save.alloc, l->next.text.data);
+    type_info.name = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
     int line = l->next.line;
     SLURP(symbol);
     MATCH(symbol);
@@ -8042,8 +8125,8 @@ static bg3_status parse_toplevel(osiris_save_builder* builder, sexp_lexer* l) {
     SLURP(symbol);
     SLURP(rparen);
   } else if (!strcmp(l->next.text.data, "defenum")) {
-    osiris_type_info* type_info;
-    osiris_enum_info enum_info = {};
+    bg3_osiris_type_info* type_info;
+    bg3_osiris_enum_info enum_info = {};
     SLURP(symbol);
     MATCH(symbol);
     if (!(type_info = lookup_type_info(builder, l->next.text.data))) {
@@ -8059,11 +8142,11 @@ static bg3_status parse_toplevel(osiris_save_builder* builder, sexp_lexer* l) {
     enum_info.index = type_info->index;
     type_info->enum_index = builder->save.num_enums + 1;
     SLURP(symbol);
-    while (l->next.type != sexp_token_type_rparen) {
-      osiris_enum_entry entry = {};
+    while (l->next.type != bg3_sexp_token_type_rparen) {
+      bg3_osiris_enum_entry entry = {};
       SLURP(lparen);
       MATCH(symbol);
-      entry.name = arena_strdup(&builder->save.alloc, l->next.text.data);
+      entry.name = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
       SLURP(symbol);
       MATCH(integer);
       entry.value = l->next.int_val;
@@ -8076,7 +8159,7 @@ static bg3_status parse_toplevel(osiris_save_builder* builder, sexp_lexer* l) {
   } else if (!strcmp(l->next.text.data, "defstory")) {
     SLURP(symbol);
     MATCH(string);
-    builder->save.version = arena_strdup(&builder->save.alloc, l->next.text.data);
+    builder->save.version = bg3_arena_strdup(&builder->save.alloc, l->next.text.data);
     SLURP(string);
     MATCH(string);
     snprintf(builder->save.story_version, sizeof(builder->save.story_version), "%s",
@@ -8100,40 +8183,40 @@ static bg3_status parse_toplevel(osiris_save_builder* builder, sexp_lexer* l) {
   return status;
 }
 
-bg3_status osiris_save_builder_parse(osiris_save_builder* builder,
-                                     char* data,
-                                     size_t data_len) {
+bg3_status bg3_osiris_save_builder_parse(bg3_osiris_save_builder* builder,
+                                         char* data,
+                                         size_t data_len) {
   bg3_status status = bg3_success;
-  sexp_lexer l;
-  sexp_lexer_init(&l, data, data_len);
-  sexp_lexer_advance(&l);
-  while (l.next.type != sexp_token_type_eof) {
+  bg3_sexp_lexer l;
+  bg3_sexp_lexer_init(&l, data, data_len);
+  bg3_sexp_lexer_advance(&l);
+  while (l.next.type != bg3_sexp_token_type_eof) {
     status = parse_toplevel(builder, &l);
     if (status) {
       break;
     }
   }
-  sexp_lexer_destroy(&l);
+  bg3_sexp_lexer_destroy(&l);
   return status;
 }
 
-bg3_status osiris_save_builder_finish(osiris_save_builder* builder) {
+bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder) {
   // create dbs and nodes for any unreferenced db predicates
   for (uint32_t i = 0; i < builder->save.num_functions; ++i) {
-    osiris_function_info* fi = builder->save.functions + i;
-    if (fi->type == osiris_function_db && !fi->rete_node) {
-      osiris_rete_node node = {
-          .type = osiris_rete_node_db,
+    bg3_osiris_function_info* fi = builder->save.functions + i;
+    if (fi->type == bg3_osiris_function_db && !fi->rete_node) {
+      bg3_osiris_rete_node node = {
+          .type = bg3_osiris_rete_node_db,
           .name = fi->name,
           .node_id = builder->save.num_rete_nodes + 1,
           .arity = fi->num_params,
       };
-      osiris_rete_db db = {};
+      bg3_osiris_rete_db db = {};
       node.db = builder->save.num_dbs + 1;
       db.db_id = node.db;
       db.num_schema_columns = fi->num_params;
       size_t sz = db.num_schema_columns * sizeof(uint16_t);
-      db.schema_columns = (uint16_t*)arena_alloc(&builder->save.alloc, sz);
+      db.schema_columns = (uint16_t*)bg3_arena_alloc(&builder->save.alloc, sz);
       memcpy(db.schema_columns, fi->params, sz);
       array_push(&builder->save.alloc, &builder->save, dbs, db);
       array_push(&builder->save.alloc, &builder->save, rete_nodes, node);
@@ -8142,9 +8225,9 @@ bg3_status osiris_save_builder_finish(osiris_save_builder* builder) {
   }
   // resolve parent goal references
   for (uint32_t i = 0; i < builder->save.num_goals; ++i) {
-    osiris_goal* g = builder->save.goals + i;
+    bg3_osiris_goal* g = builder->save.goals + i;
     if (g->unresolved_parent) {
-      osiris_goal* parent = lookup_goal(builder, g->unresolved_parent);
+      bg3_osiris_goal* parent = lookup_goal(builder, g->unresolved_parent);
       if (!parent) {
         fprintf(stderr, "undefined parent goal '%s' for goal '%s' declared on line %d\n",
                 g->unresolved_parent, g->name, g->line);
