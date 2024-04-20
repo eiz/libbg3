@@ -1,6 +1,22 @@
 // Copyright (C) 2024 Mackenzie Straight.
 //
-// All rights reserved.
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the “Software”), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #ifndef LIBBG3_H
 #define LIBBG3_H
@@ -73,12 +89,12 @@ static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
 
 #define LIBBG3_UUID_STRING_LEN 37  // including the null terminator
 
-typedef struct uuid {
+typedef struct bg3_uuid {
   uint32_t word;
   uint16_t half[6];
 } bg3_uuid;
 
-typedef struct mapped_file {
+typedef struct bg3_mapped_file {
   int fd;
   char* data;
   size_t data_len;
@@ -1479,6 +1495,7 @@ void bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
                                 bg3_vec3 world_pos,
                                 bg3_patch_file* patch);
 bg3_status bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path);
+void bg3_aigrid_file_dump(bg3_aigrid_file* file);
 
 // osiris
 #define LIBBG3_OSIRIS_VERSION_MAJOR 1
@@ -1627,7 +1644,7 @@ typedef struct bg3_osiris_rete_node_edge {
 } bg3_osiris_rete_node_edge;
 
 // Some of these fields have more specific names than what I've defined here,
-// but they seem to be tautological (they can be fully determined from the
+// but they seem to be redundant (they can be fully determined from the
 // value of other fields). Weird.
 typedef struct bg3_osiris_binding {
   uint8_t is_variable;
@@ -3737,9 +3754,6 @@ bg3_status bg3_patch_file_dump(bg3_patch_file* file) {
         printf("\n");
       }
       printf("%08X ", file->holes[i]);
-      if (file->holes[i] >= guess_bit_max) {
-        printf("falsified!\n");
-      }
     }
     printf("\n");
   }
@@ -4128,7 +4142,7 @@ uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf) {
 }
 
 void bg3_ibuf_push_align(bg3_indent_buffer* buf) {
-  // TODO: this doesn't account for utf8 extended grapheme whatevers
+  // TODO: this doesn't account for utf8
   bg3_ibuf_push(buf, buf->line_len - LIBBG3_MIN(buf->line_len, bg3_ibuf_get_indent(buf)));
 }
 
@@ -4864,7 +4878,7 @@ bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t da
 }
 
 void bg3_index_reader_destroy(bg3_index_reader* reader) {
-  // do we need this? lol
+  // TODO do we need this? lol
 }
 
 bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
@@ -5213,7 +5227,7 @@ void bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
   }
 }
 
-void aigrid_file_dump(bg3_aigrid_file* file) {
+void bg3_aigrid_file_dump(bg3_aigrid_file* file) {
   printf("aigrid version %d with %d subgrids and %d layers\n", file->header.version,
          file->num_subgrids, file->num_layers);
   for (uint32_t i = 0; i < file->num_subgrids; ++i) {
@@ -5850,8 +5864,6 @@ static void osiris_save_put_operator_common(bg3_osiris_save* save,
 }
 
 bg3_status bg3_osiris_save_write_binary(bg3_osiris_save* save, char const* path) {
-  printf("writing story with %d nodes %d dbs %d adaptors\n", save->num_rete_nodes,
-         save->num_dbs, save->num_rete_adaptors);
   FILE* fp = fopen(path, "wb");
   if (!fp) {
     return bg3_error_failed;
@@ -6416,106 +6428,6 @@ static void osiris_save_collect_goal_nodes(bg3_osiris_save* save,
   free(node_owners);
 }
 
-void osiris_save_put_sexp_edge(bg3_osiris_save* save, bg3_osiris_rete_node_edge* child) {
-  bg3_ibuf_printf(&save->text_out, "(%d %d %d)", child->node_id, child->direction,
-                  child->goal_id);
-}
-
-void osiris_save_put_sexp_parent(bg3_osiris_save* save,
-                                 bg3_osiris_rete_node_parent* parent) {
-  bg3_ibuf_printf(&save->text_out, "(%d %d %d ", parent->node_id, parent->adaptor,
-                  parent->db_node);
-  osiris_save_put_sexp_edge(save, &parent->db_edge);
-  bg3_ibuf_printf(&save->text_out, " %d)", parent->db_distance);
-}
-
-void osiris_save_put_sexp_operator_common(bg3_osiris_save* save,
-                                          bg3_osiris_rete_node_edge* child,
-                                          bg3_osiris_rete_node_parent* parent) {
-  bg3_ibuf_printf(&save->text_out, "(common ");
-  osiris_save_put_sexp_edge(save, child);
-  bg3_ibuf_printf(&save->text_out, " ");
-  osiris_save_put_sexp_parent(save, parent);
-  bg3_ibuf_printf(&save->text_out, ")");
-}
-
-void osiris_save_put_sexp_adaptor(bg3_osiris_save* save,
-                                  bg3_osiris_rete_adaptor* adaptor) {
-  bg3_ibuf_printf(
-      &save->text_out, "(adaptor%s",
-      adaptor->num_values + adaptor->num_vars + adaptor->num_pairs ? " " : "");
-  bg3_ibuf_push_align(&save->text_out);
-  bool is_first = true;
-  if (adaptor->num_values) {
-    is_first = false;
-    bg3_ibuf_printf(&save->text_out, "(constants");
-    bg3_ibuf_push_align(&save->text_out);
-    for (uint8_t i = 0; i < adaptor->num_values; ++i) {
-      bg3_ibuf_printf(&save->text_out, " (%d ", adaptor->values[i].index);
-      osiris_save_put_sexp_value(save, &adaptor->values[i].value);
-      bg3_ibuf_printf(&save->text_out, ")");
-    }
-    bg3_ibuf_printf(&save->text_out, ")");
-    bg3_ibuf_pop(&save->text_out);
-  }
-  if (adaptor->num_vars) {
-    if (!is_first) {
-      bg3_ibuf_fresh_line(&save->text_out);
-    }
-    is_first = false;
-    bg3_ibuf_printf(&save->text_out, "(vars");
-    bg3_ibuf_push_align(&save->text_out);
-    for (uint8_t i = 0; i < adaptor->num_vars; ++i) {
-      bg3_ibuf_printf(&save->text_out, " %d", adaptor->vars[i]);
-    }
-    bg3_ibuf_printf(&save->text_out, ")");
-    bg3_ibuf_pop(&save->text_out);
-  }
-  if (adaptor->num_pairs) {
-    if (!is_first) {
-      bg3_ibuf_fresh_line(&save->text_out);
-    }
-    is_first = false;
-    bg3_ibuf_fresh_line(&save->text_out);
-    bg3_ibuf_printf(&save->text_out, "(pairs");
-    bg3_ibuf_push_align(&save->text_out);
-    for (uint8_t i = 0; i < adaptor->num_pairs; ++i) {
-      bg3_ibuf_printf(&save->text_out, " (%d %d)", adaptor->pairs[i].left,
-                      adaptor->pairs[i].right);
-    }
-    bg3_ibuf_printf(&save->text_out, ")");
-    bg3_ibuf_pop(&save->text_out);
-  }
-  bg3_ibuf_printf(&save->text_out, ")");
-  bg3_ibuf_pop(&save->text_out);
-}
-
-void osiris_save_put_sexp_db(bg3_osiris_save* save, bg3_osiris_rete_db* db) {
-  bg3_ibuf_printf(&save->text_out, "(db %d (", db->db_id);
-  bg3_ibuf_push(&save->text_out, 2);
-  for (uint8_t i = 0; i < db->num_schema_columns; ++i) {
-    if (i) {
-      bg3_ibuf_printf(&save->text_out, " ");
-    }
-    bg3_ibuf_printf(&save->text_out, "%s",
-                    save->type_infos[db->schema_columns[i] - 1].name);
-  }
-  bg3_ibuf_printf(&save->text_out, ")");
-  for (uint32_t i = 0; i < db->num_rows; ++i) {
-    bg3_ibuf_fresh_line(&save->text_out);
-    bg3_ibuf_printf(&save->text_out, "(");
-    for (uint32_t j = 0; j < db->num_schema_columns; ++j) {
-      if (j) {
-        bg3_ibuf_printf(&save->text_out, " ");
-      }
-      osiris_save_put_sexp_value(save, db->rows[i].columns + j);
-    }
-    bg3_ibuf_printf(&save->text_out, ")");
-  }
-  bg3_ibuf_pop(&save->text_out);
-  bg3_ibuf_printf(&save->text_out, ")");
-}
-
 void osiris_save_put_sexp_condition_list(bg3_osiris_save* save,
                                          bg3_osiris_rete_node* node,
                                          bg3_osiris_rete_adaptor* child_adaptor,
@@ -6594,59 +6506,6 @@ void osiris_save_put_sexp_condition_list(bg3_osiris_save* save,
   }
 }
 
-bool osiris_save_put_sexp_node_chain(bg3_osiris_save* save, bg3_osiris_rete_node* node) {
-  bg3_osiris_rete_node* left_parent = get_left_parent_node(save, node);
-  bg3_osiris_rete_node* right_parent = get_right_parent_node(save, node);
-  if (!left_parent) {
-    return false;
-  }
-  bool printed_parent = osiris_save_put_sexp_node_chain(save, left_parent);
-  if (printed_parent) {
-    bg3_ibuf_fresh_line(&save->text_out);
-  }
-  if (node->db) {
-    bg3_osiris_rete_db* db = save->dbs + (node->db - 1);
-    osiris_save_put_sexp_db(save, db);
-    bg3_ibuf_fresh_line(&save->text_out);
-  }
-  switch (node->type) {
-    case bg3_osiris_rete_node_join_and:
-    case bg3_osiris_rete_node_join_and_not:
-      osiris_save_put_sexp_adaptor(
-          save, save->rete_adaptors + (node->join.left_parent.adaptor - 1));
-      bg3_ibuf_fresh_line(&save->text_out);
-      osiris_save_put_sexp_adaptor(
-          save, save->rete_adaptors + (node->join.right_parent.adaptor - 1));
-      bg3_ibuf_fresh_line(&save->text_out);
-      bg3_ibuf_printf(&save->text_out, "(%s%d %s/%d[%d] %d ",
-                      node->type == bg3_osiris_rete_node_join_and_not ? "not " : "",
-                      node->node_id, right_parent->name, right_parent->arity,
-                      right_parent->type, node->db);
-      osiris_save_put_sexp_edge(save, &node->join.child);
-      bg3_ibuf_printf(&save->text_out, " ");
-      osiris_save_put_sexp_parent(save, &node->join.left_parent);
-      bg3_ibuf_printf(&save->text_out, " ");
-      osiris_save_put_sexp_parent(save, &node->join.right_parent);
-      bg3_ibuf_printf(&save->text_out, ")");
-      break;
-    case bg3_osiris_rete_node_compare:
-      osiris_save_put_sexp_operator_common(save, &node->compare.child,
-                                           &node->compare.parent);
-      bg3_ibuf_fresh_line(&save->text_out);
-      osiris_save_put_sexp_adaptor(
-          save, save->rete_adaptors + (node->compare.parent.adaptor - 1));
-      bg3_ibuf_fresh_line(&save->text_out);
-      bg3_ibuf_printf(&save->text_out, "(compare %d %d %d %d %d)", node->compare.opcode,
-                      node->compare.left_var, node->compare.right_var,
-                      node->compare.left_value.index, node->compare.right_value.index);
-      break;
-    default:
-      bg3_ibuf_printf(&save->text_out, "(unexpected %d)", node->type);
-      break;
-  }
-  return true;
-}
-
 bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
                                       char const* path,
                                       bool verbose) {
@@ -6690,11 +6549,6 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
     bg3_ibuf_fresh_line(&save->text_out);
     bg3_ibuf_printf(&save->text_out, "(def%s %s", fn_type_names[fi->type], fi->name);
     if (fi->is_external) {
-      if (verbose) {
-        bg3_ibuf_printf(&save->text_out, " %d %d %d %d %d %d", fi->sys_opcode,
-                        fi->unused0, fi->is_external, fi->out_mask, fi->num_conds,
-                        fi->num_actions);
-      }
       bg3_ibuf_printf(&save->text_out, " %d", fi->div_opcode);
     }
     if (!fi->is_external && fi->sys_opcode) {
@@ -6707,13 +6561,6 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
         bg3_ibuf_printf(&save->text_out, " (out %s)", ti->name);
       } else {
         bg3_ibuf_printf(&save->text_out, " %s", ti->name);
-      }
-    }
-    if (fi->rete_node && verbose) {
-      bg3_osiris_rete_node* node = save->rete_nodes + (fi->rete_node - 1);
-      if (node->db && save->dbs[node->db - 1].num_rows) {
-        bg3_ibuf_fresh_line(&save->text_out);
-        osiris_save_put_sexp_db(save, save->dbs + (node->db - 1));
       }
     }
     bg3_ibuf_pop(&save->text_out);
@@ -6758,62 +6605,23 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
     size_t num_owned_nodes = owned_nodes_buf->size / sizeof(uint32_t);
     uint32_t* owned_nodes = (uint32_t*)owned_nodes_buf->data;
     for (size_t i = 0; i < num_owned_nodes; ++i) {
-      if (verbose) {
-        bg3_osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
-        bg3_osiris_rete_node* root = get_root_node(save, node);
-        bg3_ibuf_fresh_line(&save->text_out);
-        bg3_ibuf_printf(&save->text_out, "(%s %d %s/%d (",
-                        root->type == bg3_osiris_rete_node_query ? "query" : "rule",
-                        node->node_id, root->name, root->arity);
-        bg3_ibuf_push_align(&save->text_out);
-        osiris_save_put_sexp_node_chain(save, get_left_parent_node(save, node));
-        bg3_ibuf_printf(&save->text_out, ")");
-        bg3_ibuf_pop(&save->text_out);
-        bg3_ibuf_push(&save->text_out, 2);
-        bg3_ibuf_fresh_line(&save->text_out);
-        osiris_save_put_sexp_operator_common(save, &node->terminal.child,
-                                             &node->terminal.parent);
-        bg3_ibuf_fresh_line(&save->text_out);
-        bg3_ibuf_printf(&save->text_out, "(is_query %d)", node->terminal.is_query);
-        bg3_ibuf_fresh_line(&save->text_out);
-        bg3_ibuf_printf(&save->text_out, "(bindings");
-        for (uint8_t j = 0; j < node->terminal.num_vars; ++j) {
-          bg3_osiris_binding* b = node->terminal.vars + j;
-          bg3_ibuf_printf(&save->text_out, " ");
-          osiris_save_put_sexp_binding(save, node->terminal.vars + j);
-          bg3_ibuf_printf(&save->text_out,
-                          "[v0=%d;g=%d;u0=%d;v1=%d;i=%d;d=%d;l=%d;vi=%d]", b->is_variable,
-                          b->is_grounded, b->unused0, b->is_variable_again, b->index,
-                          b->is_dead, b->is_live, node->terminal.vars[j].value.index);
-        }
-        bg3_ibuf_printf(&save->text_out, ")");
-        bg3_ibuf_fresh_line(&save->text_out);
-        osiris_save_put_sexp_adaptor(
-            save, save->rete_adaptors + (node->terminal.parent.adaptor - 1));
-        bg3_ibuf_fresh_line(&save->text_out);
-        osiris_save_put_sexp_action_list(save, node->terminal.num_actions,
-                                         node->terminal.actions);
-        bg3_ibuf_printf(&save->text_out, ")");
-        bg3_ibuf_pop(&save->text_out);
-      } else {
-        bg3_osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
-        osiris_node_bindings_table table;
-        osiris_node_bindings_table_init(&table, save);
-        osiris_node_bindings_table_propagate(&table, node);
-        bg3_ibuf_fresh_line(&save->text_out);
-        bg3_ibuf_printf(&save->text_out, "(rule (");
-        bg3_ibuf_push_align(&save->text_out);
-        osiris_save_put_sexp_condition_list(save, node, 0, 0, false, &table);
-        bg3_ibuf_printf(&save->text_out, ")");
-        bg3_ibuf_pop(&save->text_out);
-        bg3_ibuf_push(&save->text_out, 2);
-        bg3_ibuf_fresh_line(&save->text_out);
-        osiris_save_put_sexp_action_list(save, node->terminal.num_actions,
-                                         node->terminal.actions);
-        bg3_ibuf_printf(&save->text_out, ")");
-        bg3_ibuf_pop(&save->text_out);
-        osiris_node_bindings_table_destroy(&table);
-      }
+      bg3_osiris_rete_node* node = save->rete_nodes + owned_nodes[i];
+      osiris_node_bindings_table table;
+      osiris_node_bindings_table_init(&table, save);
+      osiris_node_bindings_table_propagate(&table, node);
+      bg3_ibuf_fresh_line(&save->text_out);
+      bg3_ibuf_printf(&save->text_out, "(rule (");
+      bg3_ibuf_push_align(&save->text_out);
+      osiris_save_put_sexp_condition_list(save, node, 0, 0, false, &table);
+      bg3_ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_pop(&save->text_out);
+      bg3_ibuf_push(&save->text_out, 2);
+      bg3_ibuf_fresh_line(&save->text_out);
+      osiris_save_put_sexp_action_list(save, node->terminal.num_actions,
+                                       node->terminal.actions);
+      bg3_ibuf_printf(&save->text_out, ")");
+      bg3_ibuf_pop(&save->text_out);
+      osiris_node_bindings_table_destroy(&table);
     }
     bg3_ibuf_printf(&save->text_out, ")");
     bg3_ibuf_pop(&save->text_out);
