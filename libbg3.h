@@ -1250,6 +1250,7 @@ bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t da
 void bg3_index_reader_destroy(bg3_index_reader* reader);
 bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
                                              uint32_t string_idx);
+bg3_status bg3_index_build(int argc, char const** argv);
 
 typedef enum bg3_surface_type {
   bg3_surface_none = 0,
@@ -4544,7 +4545,7 @@ static int index_worker(bg3_parallel_for_thread* tcb) {
 }
 
 // TODO: make this into an api
-bg3_status index_build(int argc, char const** argv) {
+bg3_status bg3_index_build(int argc, char const** argv) {
   if (argc < 3) {
     fprintf(stderr, "syntax: %s <data path>... <index file>\n", argv[0]);
     return bg3_error_failed;

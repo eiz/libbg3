@@ -48,7 +48,7 @@ int do_find_worker(bg3_parallel_for_thread* tcb) {
   return (int)bg3_success;
 }
 
-bg3_status do_find(int argc, char const** argv) {
+int main(int argc, char const** argv) {
   if (argc < 3) {
     fprintf(stderr, "syntax: %s <index file> <search string>\n", argv[0]);
     return bg3_error_failed;

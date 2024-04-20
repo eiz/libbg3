@@ -37,7 +37,7 @@ static void print_granny_type(bg3_granny_type_info* info, int indent) {
   }
 }
 
-bg3_status do_granny(int argc, char const** argv) {
+int main(int argc, char const** argv) {
   void* handle = dlopen("/Users/eiz/l/bg3/MacOS/Baldur's Gate 3", RTLD_LAZY | RTLD_LOCAL);
   if (!handle) {
     printf("couldn't find bg3\n");
