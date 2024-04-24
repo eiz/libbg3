@@ -3762,15 +3762,7 @@ static bool granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
   if (!context) {
     return false;
   }
-  size_t pos = 0;
-  while (pos < input_len) {
-    size_t chunk_size = LIBBG3_MIN(input_len - pos, LIBBG3_GRANNY_BITKNIT_CHUNK);
-    if (!ops->decompress_incremental(context, chunk_size, input + pos)) {
-      ok = false;
-      break;
-    }
-    pos += chunk_size;
-  }
+  ok = ops->decompress_incremental(context, input_len, input);
   ops->end_file_decompression(context);
   return ok;
 }
