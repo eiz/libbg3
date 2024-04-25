@@ -1951,32 +1951,36 @@ static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
   return x * x * (3.0f - 2.0f * x);
 }
 
-static bg3_log_level g_bg3_log_level;
+static bg3_log_level g_bg3_log_level = bg3_log_level_error;
 
 void bg3_set_log_level(bg3_log_level level) {
   g_bg3_log_level = level;
 }
 
-void bg3_log_vprintf(bg3_log_level level, char const* format, va_list ap) {}
+void bg3_log_vprintf(bg3_log_level level, char const* format, va_list ap) {
+  if (level <= g_bg3_log_level) {
+    vfprintf(stderr, format, ap);
+  }
+}
 
 void __attribute__((format(printf, 1, 2))) bg3_info(char const* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  vfprintf(stdout, fmt, ap);
+  bg3_log_vprintf(bg3_log_level_info, fmt, ap);
   va_end(ap);
 }
 
 void __attribute__((format(printf, 1, 2))) bg3_error(char const* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
+  bg3_log_vprintf(bg3_log_level_error, fmt, ap);
   va_end(ap);
 }
 
 void __attribute__((noreturn)) bg3_panic(char const* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
+  bg3_log_vprintf(bg3_log_level_panic, fmt, ap);
   fprintf(stderr, "\nabort, retry, fail?\n");
   va_end(ap);
   abort();
