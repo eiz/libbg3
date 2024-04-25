@@ -83,9 +83,9 @@ typedef enum bg3_status {
 } bg3_status;
 
 typedef enum bg3_log_level {
-  bg3_log_level_info,
-  bg3_log_level_error,
   bg3_log_level_panic,
+  bg3_log_level_error,
+  bg3_log_level_info,
 } bg3_log_level;
 
 void LIBBG3_API bg3_set_log_level(bg3_log_level level);
@@ -217,9 +217,7 @@ static inline void bg3_cursor_init(bg3_cursor* cursor, void* ptr, size_t length)
 static inline void bg3_cursor_read(bg3_cursor* cursor, void* dest, size_t length) {
   ptrdiff_t avail = cursor->end - cursor->ptr;
   if (avail < length) {
-    // TODO logging
-    printf("buffer copy out of bounds\n");
-    abort();
+    bg3_panic("buffer copy out of bounds");
   }
   if (dest) {
     memcpy(dest, cursor->ptr, length);
@@ -1953,6 +1951,28 @@ static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
   return x * x * (3.0f - 2.0f * x);
 }
 
+static bg3_log_level g_bg3_log_level;
+
+void bg3_set_log_level(bg3_log_level level) {
+  g_bg3_log_level = level;
+}
+
+void bg3_log_vprintf(bg3_log_level level, char const* format, va_list ap) {}
+
+void __attribute__((format(printf, 1, 2))) bg3_info(char const* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(stdout, fmt, ap);
+  va_end(ap);
+}
+
+void __attribute__((format(printf, 1, 2))) bg3_error(char const* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(stderr, fmt, ap);
+  va_end(ap);
+}
+
 void __attribute__((noreturn)) bg3_panic(char const* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -2429,6 +2449,54 @@ void bg3_hash_clear(bg3_hash* table) {
   }
   table->num_keys = 0;
 }
+
+static uint64_t symtab_hash_fn(void* key, void* user_data) {
+  size_t len = LIBBG3_MIN(strlen((char*)key), 64);
+  char* buf = (char*)alloca(len);
+  for (size_t i = 0; i < len; ++i) {
+    buf[i] = tolower(((char*)key)[i]);
+  }
+  return XXH64(buf, len, 0);
+}
+
+static bool symtab_equal_fn(void* lhs, void* rhs, void* user_data) {
+  return !strcasecmp((char const*)lhs, (char const*)rhs);
+}
+
+static void* symtab_copy_fn(void* value, void* user_data) {
+  return bg3_arena_strdup((bg3_arena*)user_data, (char const*)value);
+}
+
+static void symtab_free_fn(void* value, void* user_data) {
+  // do nothing
+}
+
+const bg3_hash_ops symtab_hash_ops = {
+    .hash_fn = symtab_hash_fn,
+    .equal_fn = symtab_equal_fn,
+    .copy_key_fn = symtab_copy_fn,
+    .free_key_fn = symtab_free_fn,
+    .copy_value_fn = bg3_hash_default_copy_fn,
+    .free_value_fn = bg3_hash_default_free_fn,
+};
+
+static uint64_t symtab_case_hash_fn(void* key, void* user_data) {
+  size_t len = LIBBG3_MIN(strlen((char const*)key), 64);
+  return XXH64(key, len, 0);
+}
+
+static bool symtab_case_equal_fn(void* lhs, void* rhs, void* user_data) {
+  return !strcmp((char const*)lhs, (char const*)rhs);
+}
+
+const bg3_hash_ops symtab_case_hash_ops = {
+    .hash_fn = symtab_case_hash_fn,
+    .equal_fn = symtab_case_equal_fn,
+    .copy_key_fn = symtab_copy_fn,
+    .free_key_fn = symtab_free_fn,
+    .copy_value_fn = bg3_hash_default_copy_fn,
+    .free_value_fn = bg3_hash_default_free_fn,
+};
 
 void bg3_arena_init(bg3_arena* a, size_t chunk_size, size_t max_waste) {
   memset(a, 0, sizeof(bg3_arena));
@@ -3509,8 +3577,7 @@ bg3_status bg3_lsof_writer_push_sexps(bg3_lsof_writer* writer,
   bg3_sexp_lexer_advance(&l);
   while (l.next.type != bg3_sexp_token_type_eof) {
     if ((status = lsof_writer_sexp_node(writer, &l, &attr_name))) {
-      // TODO: how return errzzz0rz
-      fprintf(stderr, "parse error near line %d\n", l.line);
+      bg3_error("parse error near line %d\n", l.line);
       return status;
     }
   }
@@ -4147,7 +4214,6 @@ uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf) {
 }
 
 void bg3_ibuf_push_align(bg3_indent_buffer* buf) {
-  // TODO: this doesn't account for utf8
   bg3_ibuf_push(buf, buf->line_len - LIBBG3_MIN(buf->line_len, bg3_ibuf_get_indent(buf)));
 }
 
@@ -4708,7 +4774,7 @@ bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t da
 }
 
 void bg3_index_reader_destroy(bg3_index_reader* reader) {
-  // TODO do we need this? lol
+  // nothing to do
 }
 
 bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
@@ -6153,7 +6219,7 @@ static void osiris_save_collect_goal_nodes(bg3_osiris_save* save,
       // TODO: these are "always enabled" rules. we need to find the most
       // recent prior rule and emit this rule in a special form after that
       // rule's definition.
-      fprintf(stderr, "unable to find a controlling goal for node %d\n", i + 1);
+      bg3_error("unable to find a controlling goal for node %d\n", i + 1);
       continue;
     }
     bg3_buffer_push(node_lists + controlling_goal, &i, sizeof(uint32_t));
@@ -6303,7 +6369,8 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
     static const char* combiner_names[] = {"or", "and"};
     bg3_osiris_goal* g = save->goals + i;
     bg3_ibuf_fresh_line(&save->text_out);
-    // TODO: there's, like, 1 goal name with a space in it -_-
+    // TODO: Allow quoted syntax for goal names to avoid this. There is a single goal in
+    // BG3 which has a name that contains a space.
     char* escaped_goal_name = strdup(g->name);
     for (char* c = escaped_goal_name; *c; ++c) {
       if (*c == ' ') {
@@ -6364,56 +6431,6 @@ bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
   fclose(fp);
   return bg3_success;
 }
-
-static uint64_t symtab_hash_fn(void* key, void* user_data) {
-  size_t len = LIBBG3_MIN(strlen((char*)key), 64);
-  char* buf = (char*)alloca(len);
-  for (size_t i = 0; i < len; ++i) {
-    buf[i] = tolower(((char*)key)[i]);
-  }
-  return XXH64(buf, len, 0);
-}
-
-static bool symtab_equal_fn(void* lhs, void* rhs, void* user_data) {
-  return !strcasecmp((char const*)lhs, (char const*)rhs);
-}
-
-static void* symtab_copy_fn(void* value, void* user_data) {
-  return bg3_arena_strdup((bg3_arena*)user_data, (char const*)value);
-}
-
-static void symtab_free_fn(void* value, void* user_data) {
-  // do nothing
-}
-
-// TODO move this
-const bg3_hash_ops symtab_hash_ops = {
-    .hash_fn = symtab_hash_fn,
-    .equal_fn = symtab_equal_fn,
-    .copy_key_fn = symtab_copy_fn,
-    .free_key_fn = symtab_free_fn,
-    .copy_value_fn = bg3_hash_default_copy_fn,
-    .free_value_fn = bg3_hash_default_free_fn,
-};
-
-static uint64_t symtab_case_hash_fn(void* key, void* user_data) {
-  size_t len = LIBBG3_MIN(strlen((char const*)key), 64);
-  return XXH64(key, len, 0);
-}
-
-static bool symtab_case_equal_fn(void* lhs, void* rhs, void* user_data) {
-  return !strcmp((char const*)lhs, (char const*)rhs);
-}
-
-// TODO move this
-const bg3_hash_ops symtab_case_hash_ops = {
-    .hash_fn = symtab_case_hash_fn,
-    .equal_fn = symtab_case_equal_fn,
-    .copy_key_fn = symtab_copy_fn,
-    .free_key_fn = symtab_free_fn,
-    .copy_value_fn = bg3_hash_default_copy_fn,
-    .free_value_fn = bg3_hash_default_free_fn,
-};
 
 typedef enum symtype {
   symtype_function,
@@ -7243,13 +7260,10 @@ static void create_temp_db(bg3_osiris_save_builder* builder,
   LIBBG3_ARRAY_PUSH(&builder->save.alloc, &builder->save, dbs, db);
 }
 
-// TODO: this is less efficient than forward calculating because we're doing a
+// This is less efficient than forward calculating because we're doing a
 // lot of duplicate work for long chains (O(n^2) with respect to path length),
 // but the advantage is that it's very easy to calculate on an existing save
-// file and therefore verify our result is the exact same as Larian's. Write a
-// forward pass version at some point?
-//
-// It's also just generically nightmare fuel that needs to be simplified =/
+// file and therefore verify our result is the exact same as Larian's.
 static int8_t calc_db_distance(bg3_osiris_save* save,
                                bg3_osiris_rete_node* node,
                                bg3_osiris_rete_node_edge* edge,
