@@ -127,19 +127,8 @@ static void print_granny_type(bg3_granny_type_info* info, int indent) {
 }
 
 int main(int argc, char const** argv) {
-  void* handle = dlopen("/Users/eiz/l/bg3/MacOS/Baldur's Gate 3", RTLD_LAZY | RTLD_LOCAL);
-  if (!handle) {
-    printf("couldn't find bg3\n");
-    return bg3_error_failed;
-  }
-  void* ptr = dlsym(handle, "_ZN2ls9SingletonINS_11FileManagerEE5m_ptrE");
-  Dl_info info;
-  if (!ptr || !dladdr(ptr, &info)) {
-    printf("couldn't find an export (use _dyld_* fns instead lol)\n");
-    return bg3_error_failed;
-  }
   bg3_granny_compressor_ops compress_ops = {
-      LIBBG3_GRANNY_OP(decompress_data),
+      0,
       bg3_bk_begin_file_decompression,
       bg3_bk_decompress_incremental,
       bg3_bk_end_file_decompression,
@@ -169,15 +158,9 @@ int main(int argc, char const** argv) {
            reader.section_headers[i].num_mixed_marshals);
     printf("  fixups_offset %08X\n", reader.section_headers[i].fixups_offset);
   }
-  bg3_cursor c;
-  bg3_granny_section_ptr root_type = reader.header.root_type;
-  bg3_granny_section* section = &reader.sections[root_type.section];
-  bg3_cursor_init(&c, section->data, section->data_len);
-  bg3_cursor_seek(&c, root_type.offset);
-  print_granny_type((bg3_granny_type_info*)c.ptr, 0);
-  bg3_granny_obj_root* root =
-      (bg3_granny_obj_root*)(reader.sections[reader.header.root_obj.section].data +
-                             reader.header.root_obj.offset);
+  bg3_granny_type_info* root_type = bg3_granny_reader_get_root_type(&reader);
+  print_granny_type(root_type, 0);
+  bg3_granny_obj_root* root = bg3_granny_reader_get_root(&reader);
   printf("From file: %s\n", root->from_file_name);
   printf("Extended data: %p\n", root->extended_data.obj);
   if (root->art_tool_info) {

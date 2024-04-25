@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euox pipefail
 CC=cc
-CFLAGS="-std=c2x -fsanitize=address -Wall -Wextra -g"
+CFLAGS="-std=c2x -Wall -Wextra -g"
 THIRD_PARTY_LIBS="lz4.c lz4frame.c lz4hc.c xxhash.c miniz.c"
 cd $(dirname $0)
 mkdir -p bin

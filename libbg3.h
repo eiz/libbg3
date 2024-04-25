@@ -1144,6 +1144,8 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
                                   char* data,
                                   size_t data_len,
                                   bg3_granny_compressor_ops* compressor_ops);
+bg3_granny_obj_root* bg3_granny_reader_get_root(bg3_granny_reader* reader);
+bg3_granny_type_info* bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 
 // sexp lexer
 
@@ -2508,13 +2510,6 @@ static inline char const* bg3_lsof_dt_name(int dt) {
   return bg3_lsof_dt_names[dt];
 }
 
-#define CHECKED_READ_OUT(file, dest, offset, size, out)         \
-  do {                                                          \
-    if (mapped_file_read((file), (dest), (offset), size) < 0) { \
-      goto out;                                                 \
-    }                                                           \
-  } while (0)
-
 int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
   bg3_cursor c;
   bg3_cursor_init(&c, mapped->data, mapped->data_len);
@@ -3841,7 +3836,6 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
         reader->sections[i].owned = true;
       } else {
         free(output);
-        printf("sadge %d\n", sect->compression);
         goto err_out;
       }
     } else {
@@ -3862,7 +3856,6 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
       bg3_cursor_read(&c, &compressed_len, sizeof(uint32_t));
       if ((status = bg3_granny_decompress_bitknit(compressor_ops, (char*)fixups,
                                                   fixups_len, c.ptr, compressed_len))) {
-        printf("oopsie\n");
         free(fixups);
         goto err_out;
       }
@@ -3878,12 +3871,28 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
       free(fixups);
     }
   }
-  printf("bro?\n");
   return status;
 err_out:
-  printf("fuck\n");
   bg3_granny_reader_destroy(reader);
   return status;
+}
+
+bg3_granny_type_info* bg3_granny_reader_get_root_type(bg3_granny_reader* reader) {
+  bg3_cursor c;
+  bg3_granny_section_ptr root_type = reader->header.root_type;
+  bg3_granny_section* section = &reader->sections[root_type.section];
+  bg3_cursor_init(&c, section->data, section->data_len);
+  bg3_cursor_seek(&c, root_type.offset);
+  return (bg3_granny_type_info*)c.ptr;
+}
+
+bg3_granny_obj_root* bg3_granny_reader_get_root(bg3_granny_reader* reader) {
+  bg3_granny_section_ptr root_type = reader->header.root_type;
+  bg3_granny_section* section = &reader->sections[root_type.section];
+  bg3_granny_obj_root* root =
+      (bg3_granny_obj_root*)(reader->sections[reader->header.root_obj.section].data +
+                             reader->header.root_obj.offset);
+  return root;
 }
 
 void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src) {
