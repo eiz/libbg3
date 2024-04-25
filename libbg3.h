@@ -39,8 +39,8 @@
 #include <TargetConditionals.h>
 #if TARGET_OS_MAC
 #define LIBBG3_PLATFORM_MACOS
-#endif
-#endif
+#endif  // TARGET_OS_MAC
+#endif  // __APPLE__
 
 #include <assert.h>
 #include <inttypes.h>
@@ -59,6 +59,12 @@ extern "C" {
 #endif
 
 // utilities
+#define LIBBG3_API __attribute__((visibility("default")))
+
+#define LIBBG3_IS_SET(field, flag) (((field) & (flag)) != 0)
+#define LIBBG3_COUNT_OF(array)     ((sizeof(array)) / sizeof(*(array)))
+#define LIBBG3_MAX(x, y)           (((x) > (y)) ? (x) : (y))
+#define LIBBG3_MIN(x, y)           (((x) < (y)) ? (x) : (y))
 
 typedef _Float16 bg3_half;
 typedef float bg3_vec3[3];
@@ -76,32 +82,18 @@ typedef enum bg3_status {
   bg3_error_unsupported = -7,
 } bg3_status;
 
-void __attribute__((noreturn, format(printf, 1, 2))) bg3_panic(char const* fmt, ...);
+typedef enum bg3_log_level {
+  bg3_log_level_info,
+  bg3_log_level_error,
+  bg3_log_level_panic,
+} bg3_log_level;
 
-#define LIBBG3_IS_SET(field, flag) (((field) & (flag)) != 0)
-#define LIBBG3_COUNT_OF(array)     ((sizeof(array)) / sizeof(*(array)))
-#define LIBBG3_MAX(x, y)           (((x) > (y)) ? (x) : (y))
-#define LIBBG3_MIN(x, y)           (((x) < (y)) ? (x) : (y))
-
-static inline uint32_t bg3__next_power_of_2(uint32_t v) {
-  v--;
-  v |= v >> 1;
-  v |= v >> 2;
-  v |= v >> 4;
-  v |= v >> 8;
-  v |= v >> 16;
-  v++;
-  return v;
-}
-
-static inline float bg3__clampf(float x, float lo, float hi) {
-  return LIBBG3_MAX(lo, LIBBG3_MIN(x, hi));
-}
-
-static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
-  x = bg3__clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-  return x * x * (3.0f - 2.0f * x);
-}
+void LIBBG3_API bg3_set_log_level(bg3_log_level level);
+void LIBBG3_API bg3_log_vprintf(bg3_log_level level, char const* format, va_list ap);
+void LIBBG3_API __attribute__((format(printf, 1, 2))) bg3_info(char const* fmt, ...);
+void LIBBG3_API __attribute__((format(printf, 1, 2))) bg3_error(char const* fmt, ...);
+void LIBBG3_API __attribute__((noreturn, format(printf, 1, 2)))
+bg3_panic(char const* fmt, ...);
 
 #define LIBBG3_UUID_STRING_LEN 37  // including the null terminator
 
@@ -116,15 +108,15 @@ typedef struct bg3_mapped_file {
   size_t data_len;
 } bg3_mapped_file;
 
-bg3_status bg3_mapped_file_init_ro(bg3_mapped_file* file, char const* path);
-bg3_status bg3_mapped_file_init_rw_trunc(bg3_mapped_file* file,
-                                         char const* path,
-                                         size_t new_size);
-void bg3_mapped_file_destroy(bg3_mapped_file* file);
-bg3_status bg3_mapped_file_read(bg3_mapped_file* file,
-                                void* dest,
-                                size_t offset,
-                                size_t len);
+bg3_status LIBBG3_API bg3_mapped_file_init_ro(bg3_mapped_file* file, char const* path);
+bg3_status LIBBG3_API bg3_mapped_file_init_rw_trunc(bg3_mapped_file* file,
+                                                    char const* path,
+                                                    size_t new_size);
+void LIBBG3_API bg3_mapped_file_destroy(bg3_mapped_file* file);
+bg3_status LIBBG3_API bg3_mapped_file_read(bg3_mapped_file* file,
+                                           void* dest,
+                                           size_t offset,
+                                           size_t len);
 
 // the absolute most poverty level parallel do stuff operator
 struct bg3_parallel_for_thread;
@@ -144,12 +136,14 @@ typedef struct bg3_parallel_for_thread {
   void* user_data;
   bg3_parallel_for_sync* sync;
 } bg3_parallel_for_thread;
-int bg3_parallel_for_ncpu();
-int bg3_parallel_for(bg3_parallel_for_cb* callback, void* user_data);
-int bg3_parallel_for_n(bg3_parallel_for_cb* callback, void* user_data, int nthreads);
+int LIBBG3_API bg3_parallel_for_ncpu();
+int LIBBG3_API bg3_parallel_for(bg3_parallel_for_cb* callback, void* user_data);
+int LIBBG3_API bg3_parallel_for_n(bg3_parallel_for_cb* callback,
+                                  void* user_data,
+                                  int nthreads);
 // gpu style thread sync, must be executed unconditionally in all parallel for
 // threads
-void bg3_sync_threads(bg3_parallel_for_thread* tcb);
+void LIBBG3_API bg3_sync_threads(bg3_parallel_for_thread* tcb);
 
 #define LIBBG3_HASH_EMPTY_VALUE     ((void*)-1)
 #define LIBBG3_HASH_TOMBSTONE_VALUE ((void*)-2)
@@ -190,21 +184,24 @@ typedef struct bg3_hash {
   bg3_hash_entry* entries;
 } bg3_hash;
 
-void bg3_hash_init(bg3_hash* table, bg3_hash_ops const* ops, void* user_data);
-void bg3_hash_destroy(bg3_hash* table);
-void bg3_hash_set(bg3_hash* table, void* key, void* value);
+void LIBBG3_API bg3_hash_init(bg3_hash* table, bg3_hash_ops const* ops, void* user_data);
+void LIBBG3_API bg3_hash_destroy(bg3_hash* table);
+void LIBBG3_API bg3_hash_set(bg3_hash* table, void* key, void* value);
 // sets a key if it does not exist, otherwise returns existing entry. *existing
 // is always set to the hash entry for the key, true is returned if the key was
 // inserted.
-bool bg3_hash_try_set(bg3_hash* table, void* key, void* value, bg3_hash_entry** existing);
-bg3_hash_entry* bg3_hash_get_entry(bg3_hash* table, void* key);
-bool bg3_hash_delete(bg3_hash* table, void* key);
-void bg3_hash_clear(bg3_hash* table);
+bool LIBBG3_API bg3_hash_try_set(bg3_hash* table,
+                                 void* key,
+                                 void* value,
+                                 bg3_hash_entry** existing);
+bg3_hash_entry* LIBBG3_API bg3_hash_get_entry(bg3_hash* table, void* key);
+bool LIBBG3_API bg3_hash_delete(bg3_hash* table, void* key);
+void LIBBG3_API bg3_hash_clear(bg3_hash* table);
 
-uint64_t bg3_hash_default_hash_fn(void* key, void* user_data);
-bool bg3_hash_default_equal_fn(void* lhs, void* rhs, void* user_data);
-void* bg3_hash_default_copy_fn(void* value, void* user_data);
-void bg3_hash_default_free_fn(void* value, void* user_data);
+uint64_t LIBBG3_API bg3_hash_default_hash_fn(void* key, void* user_data);
+bool LIBBG3_API bg3_hash_default_equal_fn(void* lhs, void* rhs, void* user_data);
+void* LIBBG3_API bg3_hash_default_copy_fn(void* value, void* user_data);
+void LIBBG3_API bg3_hash_default_free_fn(void* value, void* user_data);
 
 typedef struct bg3_cursor {
   char* start;
@@ -317,9 +314,12 @@ static inline void bg3_buffer_copy(bg3_buffer* dest, bg3_buffer* src) {
   dest->size--;
 }
 
-void bg3_buffer_hexdump(bg3_buffer* buf, size_t base, void* ptr, size_t length);
-void bg3_hex_dump(void* ptr, size_t length);
-bool bg3_strcasesuffix(char const* str, char const* suffix);
+void LIBBG3_API bg3_buffer_hexdump(bg3_buffer* buf,
+                                   size_t base,
+                                   void* ptr,
+                                   size_t length);
+void LIBBG3_API bg3_hex_dump(void* ptr, size_t length);
+bool LIBBG3_API bg3_strcasesuffix(char const* str, char const* suffix);
 
 typedef struct bg3_arena_chunk {
   struct bg3_arena_chunk* next;
@@ -334,17 +334,17 @@ typedef struct bg3_arena {
   bg3_arena_chunk* full_chunks;
 } bg3_arena;
 
-void bg3_arena_init(bg3_arena* a, size_t chunk_size, size_t max_waste);
-void bg3_arena_destroy(bg3_arena* a);
-void* bg3_arena_alloc(bg3_arena* a, size_t size);
+void LIBBG3_API bg3_arena_init(bg3_arena* a, size_t chunk_size, size_t max_waste);
+void LIBBG3_API bg3_arena_destroy(bg3_arena* a);
+void* LIBBG3_API bg3_arena_alloc(bg3_arena* a, size_t size);
 static inline void* bg3_arena_calloc(bg3_arena* a, size_t count, size_t size) {
   size_t total_size = count * size;
   void* result = bg3_arena_alloc(a, total_size);
   memset(result, 0, total_size);
   return result;
 }
-char* bg3_arena_strdup(bg3_arena* a, char const* str);
-char* bg3_arena_sprintf(bg3_arena* a, char const* format, ...);
+char* LIBBG3_API bg3_arena_strdup(bg3_arena* a, char const* str);
+char* LIBBG3_API bg3_arena_sprintf(bg3_arena* a, char const* format, ...);
 
 #ifdef __cplusplus
 #define LIBBG3_ARRAY_PUSH(alloc, owner, member, val)                           \
@@ -430,12 +430,12 @@ typedef struct bg3_lspk_file {
   bg3_lspk_manifest_entry* manifest;
 } bg3_lspk_file;
 
-int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped);
-void bg3_lspk_file_destroy(bg3_lspk_file* file);
-bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
-                                 bg3_lspk_manifest_entry* entry,
-                                 char* dest,
-                                 size_t* dest_len);
+int LIBBG3_API bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped);
+void LIBBG3_API bg3_lspk_file_destroy(bg3_lspk_file* file);
+bg3_status LIBBG3_API bg3_lspk_file_extract(bg3_lspk_file* file,
+                                            bg3_lspk_manifest_entry* entry,
+                                            char* dest,
+                                            size_t* dest_len);
 
 // object files
 #define LIBBG3_LSOF_MAGIC       0x464F534C
@@ -593,40 +593,44 @@ typedef struct bg3_lsof_writer {
   bg3_buffer value_table;
 } bg3_lsof_writer;
 
-void bg3_lsof_symtab_init(bg3_lsof_symtab* table, int num_buckets);
-void bg3_lsof_symtab_init_data(bg3_lsof_symtab* table, char* ptr, size_t length);
-void bg3_lsof_symtab_destroy(bg3_lsof_symtab* table);
-bg3_lsof_symtab_entry* bg3_lsof_symtab_get_ref(bg3_lsof_symtab* table,
-                                               bg3_lsof_sym_ref ref);
-char const* bg3_lsof_symtab_entry_c_str(bg3_lsof_symtab_entry* entry);
-void bg3_lsof_symtab_dump(bg3_lsof_symtab* table);
-bg3_lsof_sym_ref bg3_lsof_symtab_intern(bg3_lsof_symtab* table, char const* name);
-void bg3_lsof_symtab_write(bg3_lsof_symtab* table, bg3_buffer* buf);
+void LIBBG3_API bg3_lsof_symtab_init(bg3_lsof_symtab* table, int num_buckets);
+void LIBBG3_API bg3_lsof_symtab_init_data(bg3_lsof_symtab* table,
+                                          char* ptr,
+                                          size_t length);
+void LIBBG3_API bg3_lsof_symtab_destroy(bg3_lsof_symtab* table);
+bg3_lsof_symtab_entry* LIBBG3_API bg3_lsof_symtab_get_ref(bg3_lsof_symtab* table,
+                                                          bg3_lsof_sym_ref ref);
+char const* LIBBG3_API bg3_lsof_symtab_entry_c_str(bg3_lsof_symtab_entry* entry);
+void LIBBG3_API bg3_lsof_symtab_dump(bg3_lsof_symtab* table);
+bg3_lsof_sym_ref LIBBG3_API bg3_lsof_symtab_intern(bg3_lsof_symtab* table,
+                                                   char const* name);
+void LIBBG3_API bg3_lsof_symtab_write(bg3_lsof_symtab* table, bg3_buffer* buf);
 
-int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len);
-void bg3_lsof_reader_destroy(bg3_lsof_reader* file);
-int bg3_lsof_reader_get_node(bg3_lsof_reader* file,
-                             bg3_lsof_node_wide* node,
-                             size_t node_index);
-int bg3_lsof_reader_get_attr(bg3_lsof_reader* file,
-                             bg3_lsof_attr_wide* attr,
-                             size_t attr_index);
-void bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file);
-int bg3_lsof_reader_print_sexp(bg3_lsof_reader* file, bg3_buffer* out);
+int LIBBG3_API bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len);
+void LIBBG3_API bg3_lsof_reader_destroy(bg3_lsof_reader* file);
+int LIBBG3_API bg3_lsof_reader_get_node(bg3_lsof_reader* file,
+                                        bg3_lsof_node_wide* node,
+                                        size_t node_index);
+int LIBBG3_API bg3_lsof_reader_get_attr(bg3_lsof_reader* file,
+                                        bg3_lsof_attr_wide* attr,
+                                        size_t attr_index);
+void LIBBG3_API bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file);
+int LIBBG3_API bg3_lsof_reader_print_sexp(bg3_lsof_reader* file, bg3_buffer* out);
 
-void bg3_lsof_writer_init(bg3_lsof_writer* writer);
-void bg3_lsof_writer_destroy(bg3_lsof_writer* writer);
-bg3_status bg3_lsof_writer_write_file(bg3_lsof_writer* writer, char const* path);
-void bg3_lsof_writer_push_node(bg3_lsof_writer* writer, char const* node_name);
-void bg3_lsof_writer_push_attr(bg3_lsof_writer* writer,
-                               char const* attr_name,
-                               bg3_lsof_dt type,
-                               void* ptr,
-                               size_t len);
-void bg3_lsof_writer_pop_node(bg3_lsof_writer* writer);
-bg3_status bg3_lsof_writer_push_sexps(bg3_lsof_writer* writer,
-                                      char const* data,
-                                      size_t data_len);
+void LIBBG3_API bg3_lsof_writer_init(bg3_lsof_writer* writer);
+void LIBBG3_API bg3_lsof_writer_destroy(bg3_lsof_writer* writer);
+bg3_status LIBBG3_API bg3_lsof_writer_write_file(bg3_lsof_writer* writer,
+                                                 char const* path);
+void LIBBG3_API bg3_lsof_writer_push_node(bg3_lsof_writer* writer, char const* node_name);
+void LIBBG3_API bg3_lsof_writer_push_attr(bg3_lsof_writer* writer,
+                                          char const* attr_name,
+                                          bg3_lsof_dt type,
+                                          void* ptr,
+                                          size_t len);
+void LIBBG3_API bg3_lsof_writer_pop_node(bg3_lsof_writer* writer);
+bg3_status LIBBG3_API bg3_lsof_writer_push_sexps(bg3_lsof_writer* writer,
+                                                 char const* data,
+                                                 size_t data_len);
 
 // localization files
 #define LIBBG3_LOCA_MAGIC 0x41434F4C  // 'LOCA' in little endian
@@ -656,22 +660,25 @@ typedef struct bg3_loca_reader {
   bg3_loca_reader_entry* entries;
 } bg3_loca_reader;
 
-bg3_status bg3_loca_reader_init(bg3_loca_reader* file, char* data, size_t data_len);
-int bg3_loca_reader_dump(bg3_loca_reader* file);
-void bg3_loca_reader_destroy(bg3_loca_reader* file);
+bg3_status LIBBG3_API bg3_loca_reader_init(bg3_loca_reader* file,
+                                           char* data,
+                                           size_t data_len);
+int LIBBG3_API bg3_loca_reader_dump(bg3_loca_reader* file);
+void LIBBG3_API bg3_loca_reader_destroy(bg3_loca_reader* file);
 
 typedef struct bg3_loca_writer {
   bg3_buffer entries;
   bg3_buffer heap;
 } bg3_loca_writer;
 
-void bg3_loca_writer_init(bg3_loca_writer* writer);
-void bg3_loca_writer_destroy(bg3_loca_writer* writer);
-void bg3_loca_writer_push(bg3_loca_writer* writer,
-                          char const* handle,
-                          uint16_t version,
-                          char const* text);
-bg3_status bg3_loca_writer_write_file(bg3_loca_writer* writer, char const* path);
+void LIBBG3_API bg3_loca_writer_init(bg3_loca_writer* writer);
+void LIBBG3_API bg3_loca_writer_destroy(bg3_loca_writer* writer);
+void LIBBG3_API bg3_loca_writer_push(bg3_loca_writer* writer,
+                                     char const* handle,
+                                     uint16_t version,
+                                     char const* text);
+bg3_status LIBBG3_API bg3_loca_writer_write_file(bg3_loca_writer* writer,
+                                                 char const* path);
 
 // patch files
 
@@ -743,9 +750,11 @@ typedef struct bg3_patch_file {
   bg3_patch_keys keys[2];
 } bg3_patch_file;
 
-bg3_status bg3_patch_file_init(bg3_patch_file* file, char* data, size_t data_len);
-void bg3_patch_file_destroy(bg3_patch_file* file);
-bg3_status bg3_patch_file_dump(bg3_patch_file* file);
+bg3_status LIBBG3_API bg3_patch_file_init(bg3_patch_file* file,
+                                          char* data,
+                                          size_t data_len);
+void LIBBG3_API bg3_patch_file_destroy(bg3_patch_file* file);
+bg3_status LIBBG3_API bg3_patch_file_dump(bg3_patch_file* file);
 
 // granny models
 typedef enum bg3_granny_compression_type {
@@ -1139,13 +1148,14 @@ typedef struct bg3_granny_reader {
   bg3_granny_section* sections;
 } bg3_granny_reader;
 
-void bg3_granny_reader_destroy(bg3_granny_reader* reader);
-bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
-                                  char* data,
-                                  size_t data_len,
-                                  bg3_granny_compressor_ops* compressor_ops);
-bg3_granny_obj_root* bg3_granny_reader_get_root(bg3_granny_reader* reader);
-bg3_granny_type_info* bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
+void LIBBG3_API bg3_granny_reader_destroy(bg3_granny_reader* reader);
+bg3_status LIBBG3_API bg3_granny_reader_init(bg3_granny_reader* reader,
+                                             char* data,
+                                             size_t data_len,
+                                             bg3_granny_compressor_ops* compressor_ops);
+bg3_granny_obj_root* LIBBG3_API bg3_granny_reader_get_root(bg3_granny_reader* reader);
+bg3_granny_type_info* LIBBG3_API
+bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 
 // sexp lexer
 
@@ -1180,12 +1190,14 @@ typedef struct bg3_sexp_lexer {
   bg3_cursor c;
 } bg3_sexp_lexer;
 
-void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src);
-void bg3_sexp_lexer_copy(bg3_sexp_lexer* dest, bg3_sexp_lexer* src);
-void bg3_sexp_lexer_init(bg3_sexp_lexer* lexer, char const* data, size_t data_len);
-void bg3_sexp_lexer_init_cstr(bg3_sexp_lexer* lexer, char const* text);
-void bg3_sexp_lexer_destroy(bg3_sexp_lexer* lexer);
-void bg3_sexp_lexer_advance(bg3_sexp_lexer* lexer);
+void LIBBG3_API bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src);
+void LIBBG3_API bg3_sexp_lexer_copy(bg3_sexp_lexer* dest, bg3_sexp_lexer* src);
+void LIBBG3_API bg3_sexp_lexer_init(bg3_sexp_lexer* lexer,
+                                    char const* data,
+                                    size_t data_len);
+void LIBBG3_API bg3_sexp_lexer_init_cstr(bg3_sexp_lexer* lexer, char const* text);
+void LIBBG3_API bg3_sexp_lexer_destroy(bg3_sexp_lexer* lexer);
+void LIBBG3_API bg3_sexp_lexer_advance(bg3_sexp_lexer* lexer);
 
 // indent buffer
 typedef struct bg3_indent_buffer {
@@ -1195,18 +1207,18 @@ typedef struct bg3_indent_buffer {
   uint32_t line_len;
 } bg3_indent_buffer;
 
-void bg3_ibuf_init(bg3_indent_buffer* buf);
-void bg3_ibuf_destroy(bg3_indent_buffer* buf);
-void bg3_ibuf_clear(bg3_indent_buffer* buf);
-void bg3_ibuf_vprintf(bg3_indent_buffer* buf, char const* fmt, va_list args);
-void __attribute__((format(printf, 2, 3)))
+void LIBBG3_API bg3_ibuf_init(bg3_indent_buffer* buf);
+void LIBBG3_API bg3_ibuf_destroy(bg3_indent_buffer* buf);
+void LIBBG3_API bg3_ibuf_clear(bg3_indent_buffer* buf);
+void LIBBG3_API bg3_ibuf_vprintf(bg3_indent_buffer* buf, char const* fmt, va_list args);
+void LIBBG3_API __attribute__((format(printf, 2, 3)))
 bg3_ibuf_printf(bg3_indent_buffer* buf, char const* fmt, ...);
-void bg3_ibuf_fresh_line(bg3_indent_buffer* buf);
-void bg3_ibuf_push_align(bg3_indent_buffer* buf);
-void bg3_ibuf_push(bg3_indent_buffer* buf, uint32_t width);
-void bg3_ibuf_pop(bg3_indent_buffer* buf);
-uint32_t bg3_ibuf_get_next_col(bg3_indent_buffer* buf);
-uint32_t bg3_ibuf_get_indent(bg3_indent_buffer* buf);
+void LIBBG3_API bg3_ibuf_fresh_line(bg3_indent_buffer* buf);
+void LIBBG3_API bg3_ibuf_push_align(bg3_indent_buffer* buf);
+void LIBBG3_API bg3_ibuf_push(bg3_indent_buffer* buf, uint32_t width);
+void LIBBG3_API bg3_ibuf_pop(bg3_indent_buffer* buf);
+uint32_t LIBBG3_API bg3_ibuf_get_next_col(bg3_indent_buffer* buf);
+uint32_t LIBBG3_API bg3_ibuf_get_indent(bg3_indent_buffer* buf);
 
 // xref index
 #define LIBBG3_INDEX_MAGIC   0x5844534C  // 'LSDX'
@@ -1252,11 +1264,13 @@ typedef struct bg3_index_reader {
   char* strings;
 } bg3_index_reader;
 
-bg3_status bg3_index_reader_init(bg3_index_reader* reader, char* data, size_t data_len);
-void bg3_index_reader_destroy(bg3_index_reader* reader);
-bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
-                                             uint32_t string_idx);
-bg3_status bg3_index_build(int argc, char const** argv);
+bg3_status LIBBG3_API bg3_index_reader_init(bg3_index_reader* reader,
+                                            char* data,
+                                            size_t data_len);
+void LIBBG3_API bg3_index_reader_destroy(bg3_index_reader* reader);
+bg3_index_entry* LIBBG3_API bg3_index_reader_find_entry(bg3_index_reader* reader,
+                                                        uint32_t string_idx);
+bg3_status LIBBG3_API bg3_index_build(int argc, char const** argv);
 
 typedef enum bg3_surface_type {
   bg3_surface_none = 0,
@@ -1504,23 +1518,25 @@ typedef struct bg3_aigrid_file {
   bg3_aigrid_layer* layers;
 } bg3_aigrid_file;
 
-bg3_status bg3_aigrid_file_init(bg3_aigrid_file* file, char* data, size_t data_len);
-void bg3_aigrid_file_init_new(bg3_aigrid_file* file);
-void bg3_aigrid_file_destroy(bg3_aigrid_file* file);
-bg3_aigrid_subgrid* bg3_aigrid_file_create_subgrid(bg3_aigrid_file* file,
-                                                   uint32_t width,
-                                                   uint32_t height,
-                                                   bg3_uuid* object_uuid,
-                                                   bg3_uuid* template_uuid,
-                                                   int16_t tile_x,
-                                                   int16_t tile_y,
-                                                   bg3_vec3 world_pos);
-void bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
-                                bg3_uuid* object_uuid,
-                                bg3_vec3 world_pos,
-                                bg3_patch_file* patch);
-bg3_status bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path);
-void bg3_aigrid_file_dump(bg3_aigrid_file* file);
+bg3_status LIBBG3_API bg3_aigrid_file_init(bg3_aigrid_file* file,
+                                           char* data,
+                                           size_t data_len);
+void LIBBG3_API bg3_aigrid_file_init_new(bg3_aigrid_file* file);
+void LIBBG3_API bg3_aigrid_file_destroy(bg3_aigrid_file* file);
+bg3_aigrid_subgrid* LIBBG3_API bg3_aigrid_file_create_subgrid(bg3_aigrid_file* file,
+                                                              uint32_t width,
+                                                              uint32_t height,
+                                                              bg3_uuid* object_uuid,
+                                                              bg3_uuid* template_uuid,
+                                                              int16_t tile_x,
+                                                              int16_t tile_y,
+                                                              bg3_vec3 world_pos);
+void LIBBG3_API bg3_aigrid_file_cook_patch(bg3_aigrid_file* file,
+                                           bg3_uuid* object_uuid,
+                                           bg3_vec3 world_pos,
+                                           bg3_patch_file* patch);
+bg3_status LIBBG3_API bg3_aigrid_file_write(bg3_aigrid_file* file, char const* path);
+void LIBBG3_API bg3_aigrid_file_dump(bg3_aigrid_file* file);
 
 // osiris
 #define LIBBG3_OSIRIS_VERSION_MAJOR 1
@@ -1843,15 +1859,16 @@ typedef struct bg3_osiris_save {
   bg3_osiris_action* global_actions;
 } bg3_osiris_save;
 
-void bg3_osiris_save_destroy(bg3_osiris_save* reader);
-void bg3_osiris_save_init(bg3_osiris_save* reader);
-bg3_status bg3_osiris_save_init_binary(bg3_osiris_save* reader,
-                                       char* data,
-                                       size_t data_len);
-bg3_status bg3_osiris_save_write_binary(bg3_osiris_save* save, char const* path);
-bg3_status bg3_osiris_save_write_sexp(bg3_osiris_save* save,
-                                      char const* path,
-                                      bool verbose);
+void LIBBG3_API bg3_osiris_save_destroy(bg3_osiris_save* reader);
+void LIBBG3_API bg3_osiris_save_init(bg3_osiris_save* reader);
+bg3_status LIBBG3_API bg3_osiris_save_init_binary(bg3_osiris_save* reader,
+                                                  char* data,
+                                                  size_t data_len);
+bg3_status LIBBG3_API bg3_osiris_save_write_binary(bg3_osiris_save* save,
+                                                   char const* path);
+bg3_status LIBBG3_API bg3_osiris_save_write_sexp(bg3_osiris_save* save,
+                                                 char const* path,
+                                                 bool verbose);
 
 #define LIBBG3_OSIRIS_MAX_LOCALS 32
 
@@ -1866,12 +1883,12 @@ typedef struct bg3_osiris_save_builder {
   uint32_t next_var;
 } bg3_osiris_save_builder;
 
-void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder);
-void bg3_osiris_save_builder_destroy(bg3_osiris_save_builder* builder);
-bg3_status bg3_osiris_save_builder_parse(bg3_osiris_save_builder* builder,
-                                         char* data,
-                                         size_t data_len);
-bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder);
+void LIBBG3_API bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder);
+void LIBBG3_API bg3_osiris_save_builder_destroy(bg3_osiris_save_builder* builder);
+bg3_status LIBBG3_API bg3_osiris_save_builder_parse(bg3_osiris_save_builder* builder,
+                                                    char* data,
+                                                    size_t data_len);
+bg3_status LIBBG3_API bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder);
 
 #ifdef __cplusplus
 }
@@ -1915,6 +1932,26 @@ bg3_status bg3_osiris_save_builder_finish(bg3_osiris_save_builder* builder);
 // for laying out file structs
 
 // utilities
+
+static inline uint32_t bg3__next_power_of_2(uint32_t v) {
+  v--;
+  v |= v >> 1;
+  v |= v >> 2;
+  v |= v >> 4;
+  v |= v >> 8;
+  v |= v >> 16;
+  v++;
+  return v;
+}
+
+static inline float bg3__clampf(float x, float lo, float hi) {
+  return LIBBG3_MAX(lo, LIBBG3_MIN(x, hi));
+}
+
+static inline float bg3__smoothstepf(float edge0, float edge1, float x) {
+  x = bg3__clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+  return x * x * (3.0f - 2.0f * x);
+}
 
 void __attribute__((noreturn)) bg3_panic(char const* fmt, ...) {
   va_list ap;
