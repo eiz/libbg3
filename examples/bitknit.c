@@ -1,4 +1,38 @@
 // adapted from https://github.com/powzix/ooz
+// the copyright status of this code is unclear but one of the files in
+// the repo came with this license:
+// === Kraken Decompressor for Windows ===
+// Copyright (C) 2016, Powzix
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+// Several things have been changed from the original implementation to accomodate the
+// Granny bitstream format.
+//
+// - Generally reorganized how dst pointer is used to match Granny bitstream and support
+// chunked decoding. there was some weird code for handling the last 4 bytes which
+// definitely are not how the Granny implementation does it.
+// - The initialization bits at the beginning of a quantum are loaded in some weird
+// middle-endian format in Granny.
+// - Some minimal bounds checking for debugging purposes (still not safe to use with
+// untrusted input)
+// - Replaced copy functions with a simpler and slower version that doesn't do out of
+// bounds memory access.
+//
+// This code still has some UB problems even on clean input (mainly unaligned loads). I
+// intend to replace it with a clean implementation under MIT license so that it can be
+// included in the library and not just an example.
 
 #include <assert.h>
 #include <stddef.h>
@@ -296,7 +330,6 @@ size_t Bitknit_Decode(const uint8_t* src,
     RENORMALIZE();
   }
   while (dst < dst_quantum_end) {
-    // printf("%08X\n", (int)(dst_quantum_end - dst));
     uint32_t sym = BitknitLiteral_Lookup(litmodel[(intptr_t)dst & 3], &bits);
     RENORMALIZE();
     if (sym < 256) {
