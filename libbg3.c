@@ -1,3 +1,5 @@
+// libbg3
+//
 // Copyright (C) 2024 Mackenzie Straight.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy

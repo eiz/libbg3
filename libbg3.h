@@ -73,6 +73,7 @@ typedef enum bg3_status {
   bg3_error_bad_version = -4,
   bg3_error_libc = -5,
   bg3_error_not_found = -6,
+  bg3_error_unsupported = -7,
 } bg3_status;
 
 void __attribute__((noreturn, format(printf, 1, 2))) bg3_panic(char const* fmt, ...);
@@ -1138,6 +1139,7 @@ typedef struct bg3_granny_reader {
   bg3_granny_section* sections;
 } bg3_granny_reader;
 
+void bg3_granny_reader_destroy(bg3_granny_reader* reader);
 bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
                                   char* data,
                                   size_t data_len,
@@ -3750,27 +3752,48 @@ bg3_status bg3_patch_file_dump(bg3_patch_file* file) {
   return bg3_success;
 }
 
-static bool granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
-                                      char* output,
-                                      size_t output_len,
-                                      char* input,
-                                      size_t input_len) {
+static bg3_status bg3_granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
+                                                char* output,
+                                                size_t output_len,
+                                                char* input,
+                                                size_t input_len) {
+  if (!input_len && !output_len) {
+    return bg3_success;
+  }
+  if (!ops->begin_file_decompression || !ops->decompress_incremental ||
+      !ops->end_file_decompression) {
+    printf("unsupported\n");
+    return bg3_error_unsupported;
+  }
   bool ok = true;
   char tmpbuf[0x4000];
   void* context = ops->begin_file_decompression(bg3_granny_compression_bitknit2, false,
                                                 output_len, output, 0x4000, tmpbuf);
   if (!context) {
-    return false;
+    return bg3_error_failed;
   }
   ok = ops->decompress_incremental(context, input_len, input);
   ops->end_file_decompression(context);
-  return ok;
+  if (!ok) {
+    printf("codec failure\n");
+  }
+  return ok ? bg3_success : bg3_error_failed;
+}
+
+void bg3_granny_reader_destroy(bg3_granny_reader* reader) {
+  for (uint32_t i = 0; i < reader->header.num_sections; ++i) {
+    if (reader->sections[i].owned) {
+      free(reader->sections[i].data);
+    }
+  }
+  free(reader->sections);
 }
 
 bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
                                   char* data,
                                   size_t data_len,
                                   bg3_granny_compressor_ops* compressor_ops) {
+  bg3_status status = bg3_success;
   memset(reader, 0, sizeof(bg3_granny_reader));
   reader->data = data;
   reader->data_len = data_len;
@@ -3805,23 +3828,21 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
     // TODO bounds checking
     if (sect->compression) {
       void* output = calloc(1, sect->uncompressed_len);
-      int result;
       if (sect->compression == bg3_granny_compression_bitknit2) {
-        result = granny_decompress_bitknit(compressor_ops, (char*)output,
-                                           sect->uncompressed_len, c.start + sect->offset,
-                                           sect->compressed_len);
+        status = bg3_granny_decompress_bitknit(
+            compressor_ops, (char*)output, sect->uncompressed_len, c.start + sect->offset,
+            sect->compressed_len);
       } else {
-        // TODO totally untested code path
-        result = compressor_ops->decompress_data(
-            sect->compression, false, sect->compressed_len, c.start + sect->offset,
-            sect->stream0_end, sect->stream1_end, sect->uncompressed_len, output);
+        status = bg3_error_unsupported;
       }
-      if (result) {
+      if (!status) {
         reader->sections[i].data = (char*)output;
         reader->sections[i].data_len = sect->uncompressed_len;
         reader->sections[i].owned = true;
       } else {
         free(output);
+        printf("sadge %d\n", sect->compression);
+        goto err_out;
       }
     } else {
       reader->sections[i].data = c.start + sect->offset;
@@ -3839,9 +3860,11 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
       bg3_cursor_seek(&c, sect->fixups_offset);
       uint32_t compressed_len;
       bg3_cursor_read(&c, &compressed_len, sizeof(uint32_t));
-      if (!granny_decompress_bitknit(compressor_ops, (char*)fixups, fixups_len, c.ptr,
-                                     compressed_len)) {
-        bg3_panic("fixups decompress failed\n");
+      if ((status = bg3_granny_decompress_bitknit(compressor_ops, (char*)fixups,
+                                                  fixups_len, c.ptr, compressed_len))) {
+        printf("oopsie\n");
+        free(fixups);
+        goto err_out;
       }
     } else {
       fixups = (bg3_granny_fixup*)(c.start + sect->fixups_offset);
@@ -3855,7 +3878,12 @@ bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
       free(fixups);
     }
   }
-  return bg3_success;
+  printf("bro?\n");
+  return status;
+err_out:
+  printf("fuck\n");
+  bg3_granny_reader_destroy(reader);
+  return status;
 }
 
 void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src) {

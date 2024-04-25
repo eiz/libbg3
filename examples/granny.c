@@ -23,6 +23,8 @@
 #define LIBBG3_IMPLEMENTATION
 #include "../libbg3.h"
 
+#include "bitknit.c"
+
 // TODO: scan for these.
 static const size_t offset_granny_decompress_data = 0x516a30;
 static const size_t offset_granny_begin_file_decompression = 0x516a38;
@@ -31,6 +33,71 @@ static const size_t offset_granny_end_file_decompression = 0x516a40;
 
 #define LIBBG3_GRANNY_OP(name) \
   .name = (bg3_fn_granny_##name*)((char*)info.dli_fbase + offset_granny_##name)
+
+typedef struct bg3_bk_context {
+  BitknitState* state;
+  void* dst;
+  uint32_t dst_len;
+} bg3_bk_context;
+
+static void* bg3_bk_begin_file_decompression(int type,
+                                             bool endian_swapped,
+                                             uint32_t dst_len,
+                                             void* dst,
+                                             uint32_t work_size,
+                                             void* work) {
+  if (endian_swapped || sizeof(BitknitState) > work_size) {
+    bg3_panic("no");
+  }
+  bg3_bk_context* ctx = calloc(1, sizeof(bg3_bk_context));
+  ctx->state = (BitknitState*)work;
+  ctx->dst = dst;
+  ctx->dst_len = dst_len;
+  memset(dst, 0xFC, dst_len);
+  BitknitState_Init(ctx->state);
+  return ctx;
+}
+
+#define BITKNIT2_MAGIC 0x75B1
+
+static bool bg3_bk_decompress_incremental(void* ctx, uint32_t src_len, void* src) {
+  bg3_bk_context* bk_ctx = (bg3_bk_context*)ctx;
+  if (src_len < 2 || *(uint16_t*)src != BITKNIT2_MAGIC) {
+    printf("bad magic %d\n", src_len);
+    bg3_hex_dump(src, LIBBG3_MIN(src_len, 16));
+    return false;
+  }
+  void *src_cur = src + 2, *src_end = src + src_len, *dst_cur = bk_ctx->dst,
+       *dst_end = bk_ctx->dst + bk_ctx->dst_len;
+  int chunk_index = 1;
+  while (dst_cur < dst_end) {
+    uint32_t chunk_end = LIBBG3_MIN(bk_ctx->dst_len, chunk_index * 65536);
+    if (!*(uint16_t*)src_cur) {
+      src_cur += 2;
+      size_t copy_len =
+          LIBBG3_MIN(src_end - src_cur, chunk_end - (uint32_t)(dst_cur - bk_ctx->dst));
+      memcpy(dst_cur, src_cur, copy_len);
+      src_cur += copy_len;
+      dst_cur += copy_len;
+    } else {
+      size_t used =
+          Bitknit_Decode(src_cur, src_end, (uint8_t**)&dst_cur, bk_ctx->dst + chunk_end,
+                         dst_end, bk_ctx->dst, bk_ctx->state);
+      if (!used) {
+        printf("bitknit.c failure??\n");
+        return false;
+      }
+      src_cur += used;
+    }
+    chunk_index++;
+  }
+  return true;
+}
+
+static bool bg3_bk_end_file_decompression(void* ctx) {
+  free(ctx);
+  return true;
+}
 
 static void print_granny_type(bg3_granny_type_info* info, int indent) {
   bg3_granny_type_info* first = info;
@@ -73,9 +140,9 @@ int main(int argc, char const** argv) {
   }
   bg3_granny_compressor_ops compress_ops = {
       LIBBG3_GRANNY_OP(decompress_data),
-      LIBBG3_GRANNY_OP(begin_file_decompression),
-      LIBBG3_GRANNY_OP(decompress_incremental),
-      LIBBG3_GRANNY_OP(end_file_decompression),
+      bg3_bk_begin_file_decompression,
+      bg3_bk_decompress_incremental,
+      bg3_bk_end_file_decompression,
   };
   if (argc < 2) {
     fprintf(stderr, "syntax: %s <.gr2 path>\n", argv[0]);
