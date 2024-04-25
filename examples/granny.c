@@ -25,15 +25,6 @@
 
 #include "bitknit.c"
 
-// TODO: scan for these.
-static const size_t offset_granny_decompress_data = 0x516a30;
-static const size_t offset_granny_begin_file_decompression = 0x516a38;
-static const size_t offset_granny_decompress_incremental = 0x516a3c;
-static const size_t offset_granny_end_file_decompression = 0x516a40;
-
-#define LIBBG3_GRANNY_OP(name) \
-  .name = (bg3_fn_granny_##name*)((char*)info.dli_fbase + offset_granny_##name)
-
 typedef struct bg3_bk_context {
   BitknitState* state;
   void* dst;
@@ -47,7 +38,7 @@ static void* bg3_bk_begin_file_decompression(int type,
                                              uint32_t work_size,
                                              void* work) {
   if (endian_swapped || sizeof(BitknitState) > work_size) {
-    bg3_panic("no");
+    bg3_panic("big endian granny files are unsupported");
   }
   bg3_bk_context* ctx = calloc(1, sizeof(bg3_bk_context));
   ctx->state = (BitknitState*)work;
@@ -63,8 +54,6 @@ static void* bg3_bk_begin_file_decompression(int type,
 static bool bg3_bk_decompress_incremental(void* ctx, uint32_t src_len, void* src) {
   bg3_bk_context* bk_ctx = (bg3_bk_context*)ctx;
   if (src_len < 2 || *(uint16_t*)src != BITKNIT2_MAGIC) {
-    printf("bad magic %d\n", src_len);
-    bg3_hex_dump(src, LIBBG3_MIN(src_len, 16));
     return false;
   }
   void *src_cur = src + 2, *src_end = src + src_len, *dst_cur = bk_ctx->dst,
@@ -84,7 +73,6 @@ static bool bg3_bk_decompress_incremental(void* ctx, uint32_t src_len, void* src
           Bitknit_Decode(src_cur, src_end, (uint8_t**)&dst_cur, bk_ctx->dst + chunk_end,
                          dst_end, bk_ctx->dst, bk_ctx->state);
       if (!used) {
-        printf("bitknit.c failure??\n");
         return false;
       }
       src_cur += used;
@@ -135,17 +123,17 @@ int main(int argc, char const** argv) {
   };
   if (argc < 2) {
     fprintf(stderr, "syntax: %s <.gr2 path>\n", argv[0]);
-    return bg3_error_failed;
+    return 1;
   }
   bg3_mapped_file mapped;
   bg3_granny_reader reader;
   if (bg3_mapped_file_init_ro(&mapped, argv[1])) {
     fprintf(stderr, "failed to open file\n");
-    return bg3_error_failed;
+    return 1;
   }
   if (bg3_granny_reader_init(&reader, mapped.data, mapped.data_len, &compress_ops)) {
     fprintf(stderr, "failed to load granny file\n");
-    return bg3_error_failed;
+    return 1;
   }
   printf("root type %08X:%08X\n", reader.header.root_type.section,
          reader.header.root_type.offset);
@@ -159,8 +147,8 @@ int main(int argc, char const** argv) {
     printf("  fixups_offset %08X\n", reader.section_headers[i].fixups_offset);
   }
   bg3_granny_type_info* root_type = bg3_granny_reader_get_root_type(&reader);
-  print_granny_type(root_type, 0);
   bg3_granny_obj_root* root = bg3_granny_reader_get_root(&reader);
+  print_granny_type(root_type, 0);
   printf("From file: %s\n", root->from_file_name);
   printf("Extended data: %p\n", root->extended_data.obj);
   if (root->art_tool_info) {
@@ -188,6 +176,13 @@ int main(int argc, char const** argv) {
     }
   }
   for (int i = 0; i < root->num_meshes; ++i) {
+    char nbuf[1024];
+    snprintf(nbuf, 1024, "tmp/%s.obj", root->meshes[i]->name);
+    FILE* fp = fopen(nbuf, "wb");
+    if (!fp) {
+      perror("fopen");
+      continue;
+    }
     printf("mesh %s\n", root->meshes[i]->name);
     printf("  ext %p\n", root->meshes[i]->extended_data.obj);
     if (root->meshes[i]->extended_data.obj) {
@@ -201,12 +196,6 @@ int main(int argc, char const** argv) {
       printf("    is_impostor %d\n", props->is_impostor);
       printf("    ext %p\n", props->extended_data.obj);
       print_granny_type(root->meshes[i]->extended_data.type, 2);
-    }
-    char nbuf[1024];
-    snprintf(nbuf, 1024, "tmp/%s.obj", root->meshes[i]->name);
-    FILE* fp = fopen(nbuf, "wb");
-    if (!fp) {
-      abort();
     }
     bg3_granny_obj_vertex_data* vdata = root->meshes[i]->primary_vertex_data;
     bg3_granny_obj_tri_topology* topo = root->meshes[i]->primary_topology;
@@ -244,5 +233,6 @@ int main(int argc, char const** argv) {
 #endif
     print_granny_type(vdata->vertices.type, 4);
   }
+  bg3_granny_reader_destroy(&reader);
   return bg3_error_failed;
 }
