@@ -17,22 +17,23 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Several things have been changed from the original implementation to accomodate the
-// Granny bitstream format.
+// Several things have been changed from the original implementation to
+// accomodate the Granny bitstream format.
 //
-// - Generally reorganized how dst pointer is used to match Granny bitstream and support
-// chunked decoding. there was some weird code for handling the last 4 bytes which
-// definitely are not how the Granny implementation does it.
-// - The initialization bits at the beginning of a quantum are loaded in some weird
-// middle-endian format in Granny.
-// - Some minimal bounds checking for debugging purposes (still not safe to use with
-// untrusted input)
-// - Replaced copy functions with a simpler and slower version that doesn't do out of
-// bounds memory access.
+// - Generally reorganized how dst pointer is used to match Granny bitstream and
+//   support chunked decoding. there was some weird code for handling the last 4
+//   bytes which definitely are not how the Granny implementation does it.
+// - The initialization bits at the beginning of a quantum are loaded in some
+//   weird middle-endian format in Granny.
+// - Some minimal bounds checking for debugging purposes (still not safe to use
+//   with untrusted input)
+// - Replaced copy functions with a simpler and slower version that doesn't do
+//   out of bounds memory access. I believe in Granny we need to copy a multiple
+//   of 8 bytes instead of 16, but the current version is just one at a time.
 //
-// This code still has some UB problems even on clean input (mainly unaligned loads). I
-// intend to replace it with a clean implementation under MIT license so that it can be
-// included in the library and not just an example.
+// This code still has some UB problems even on clean input (mainly unaligned
+// loads). I intend to replace it with a clean implementation under MIT license
+// so that it can be included in the library and not just an example.
 
 #include <assert.h>
 #include <stddef.h>

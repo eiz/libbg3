@@ -1,24 +1,19 @@
-// libbg3
+// libbg3 examples
 //
 // Copyright (C) 2024 Mackenzie Straight.
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the “Software”), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version.
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+// details.
 //
-// THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
 
 #define LIBBG3_IMPLEMENTATION
 #include "../libbg3.h"
@@ -135,46 +130,24 @@ int main(int argc, char const** argv) {
     fprintf(stderr, "failed to load granny file\n");
     return 1;
   }
-  printf("root type %08X:%08X\n", reader.header.root_type.section,
-         reader.header.root_type.offset);
-  printf("root obj %08X:%08X\n", reader.header.root_obj.section,
-         reader.header.root_obj.offset);
-  for (int i = 0; i < reader.header.num_sections; ++i) {
-    printf("section %d\n", i);
-    printf("  num_fixups %d num_mixed_marshals %d\n",
-           reader.section_headers[i].num_fixups,
-           reader.section_headers[i].num_mixed_marshals);
-    printf("  fixups_offset %08X\n", reader.section_headers[i].fixups_offset);
-  }
   bg3_granny_type_info* root_type = bg3_granny_reader_get_root_type(&reader);
   bg3_granny_obj_root* root = bg3_granny_reader_get_root(&reader);
+  printf("File schema:\n");
   print_granny_type(root_type, 0);
   printf("From file: %s\n", root->from_file_name);
   printf("Extended data: %p\n", root->extended_data.obj);
   if (root->art_tool_info) {
     printf("Art tool: %s\n", root->art_tool_info->from_art_tool_name);
   }
-  printf(
-      "num_textures %d num_materials %d num_skeletons %d num_vertex_datas "
-      "%d\n",
-      root->num_textures, root->num_materials, root->num_skeletons,
-      root->num_vertex_datas);
-  printf(
-      "num_tri_topologies %d num_meshes %d num_models %d num_track_groups "
-      "%d\n",
-      root->num_tri_topologies, root->num_meshes, root->num_models,
-      root->num_track_groups);
-  printf("num_animations %d\n", root->num_animations);
-  for (int i = 0; i < root->num_skeletons; ++i) {
-    printf("skeleton %s with %d bones\n", root->skeletons[i]->name,
-           root->skeletons[i]->num_bones);
-    printf("  ext %p\n", root->skeletons[i]->extended_data.obj);
-    for (int j = 0; j < root->skeletons[i]->num_bones; ++j) {
-      bg3_granny_obj_bone* bone = &root->skeletons[i]->bones[j];
-      printf("  bone %s\n", bone->name);
-      printf("    ext %p\n", bone->extended_data.obj);
-    }
-  }
+  printf("Textures: %d\n", root->num_textures);
+  printf("Materials: %d\n", root->num_materials);
+  printf("Skeletons: %d\n", root->num_skeletons);
+  printf("Vertex datas: %d\n", root->num_vertex_datas);
+  printf("Tri topologies: %d\n", root->num_tri_topologies);
+  printf("Meshes: %d\n", root->num_meshes);
+  printf("Models: %d\n", root->num_models);
+  printf("Track groups: %d\n", root->num_track_groups);
+  printf("Animations: %d\n", root->num_animations);
   for (int i = 0; i < root->num_meshes; ++i) {
     char nbuf[1024];
     snprintf(nbuf, 1024, "tmp/%s.obj", root->meshes[i]->name);
