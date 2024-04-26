@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euox pipefail
 CC=cc
-CFLAGS="-std=c2x -Wall -Wextra -g"
-THIRD_PARTY_LIBS="lz4.c lz4frame.c lz4hc.c xxhash.c miniz.c"
+CFLAGS="-std=c2x -Wall -Wextra -g -I$(dirname $0)/third_party"
+THIRD_PARTY_LIBS="third_party/lz4.c third_party/lz4frame.c third_party/lz4hc.c third_party/xxhash.c third_party/miniz.c"
 cd $(dirname $0)
 mkdir -p bin
 $CC $CFLAGS -o bin/granny examples/granny.c $THIRD_PARTY_LIBS
