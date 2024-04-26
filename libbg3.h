@@ -7174,7 +7174,7 @@ static uint32_t create_adaptor(bg3_osiris_save_builder* builder,
                                condition* output) {
   bg3_osiris_rete_adaptor adaptor = {
       .adaptor_id = builder->save.num_rete_adaptors + 1,
-      .num_vars = parent->num_bindings,
+      .num_vars = (uint8_t)parent->num_bindings,
       .vars = (uint8_t*)bg3_arena_alloc(&builder->save.alloc, parent->num_bindings),
   };
   for (uint32_t i = 0; i < parent->num_bindings; ++i) {
@@ -7373,7 +7373,7 @@ static bg3_status create_terminal_node(bg3_osiris_save_builder* builder,
   assert(last->node_id);
   condition terminal_cond = {
       .type = condition_terminal,
-      .line = l->next.line,
+      .line = (uint32_t)l->next.line,
       .node_id = builder->save.num_rete_nodes + 1,
       .root_is_query = last->root_is_query,
   };
@@ -7382,7 +7382,7 @@ static bg3_status create_terminal_node(bg3_osiris_save_builder* builder,
       .node_id = terminal_cond.node_id,
       .terminal.parent.node_id = last->node_id,
       .terminal.parent.adaptor = create_adaptor(builder, last, &terminal_cond),
-      .terminal.line = l->next.line,
+      .terminal.line = (uint32_t)l->next.line,
       .terminal.is_query = last->root_is_query,
   };
   link_parent(builder, last, &node, bg3_osiris_edge_direction_none);
@@ -7425,8 +7425,10 @@ static bg3_status create_compare_node(bg3_osiris_save_builder* builder,
       .compare.parent.node_id = prev->node_id,
       .compare.parent.adaptor = create_adaptor(builder, prev, &compare_cond),
       .compare.opcode = comp->compare_op,
-      .compare.left_var = comp->bindings[0].is_variable ? comp->bindings[0].index : 255,
-      .compare.right_var = comp->bindings[1].is_variable ? comp->bindings[1].index : 255,
+      .compare.left_var =
+          (uint8_t)(comp->bindings[0].is_variable ? comp->bindings[0].index : 255),
+      .compare.right_var =
+          (uint8_t)(comp->bindings[1].is_variable ? comp->bindings[1].index : 255),
       .compare.left_value = comp->bindings[0].is_variable ? (bg3_osiris_variant){}
                                                           : comp->bindings[0].value,
       .compare.right_value = comp->bindings[1].is_variable ? (bg3_osiris_variant){}
