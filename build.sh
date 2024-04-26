@@ -9,3 +9,4 @@ $CC $CFLAGS -o bin/granny examples/granny.c $THIRD_PARTY_LIBS
 $CC $CFLAGS -o bin/bg3_find examples/bg3_find.c $THIRD_PARTY_LIBS
 $CC $CFLAGS -o bin/bg3_index examples/bg3_index.c $THIRD_PARTY_LIBS
 $CC $CFLAGS -o bin/lspk examples/lspk.c $THIRD_PARTY_LIBS
+$CC $CFLAGS -o bin/osiris examples/osiris.c $THIRD_PARTY_LIBS
