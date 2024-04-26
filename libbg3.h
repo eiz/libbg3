@@ -157,20 +157,6 @@ typedef struct bg3_hash_ops {
   void (*free_value_fn)(void* value, void* user_data);
 } bg3_hash_ops;
 
-extern const bg3_hash_ops default_hash_ops;
-
-// TODO: this is just kinda here atm because it doesn't have a better place to
-// be it was originally just for osiris symbol tables but the 24/8 layout and
-// hash ops are useful for other things
-//
-// user_data must be a pointer to an arena. keys will be copied into the arena.
-#define LIBBG3_MAKE_SYMBOL_VALUE(symtype, index) \
-  ((void*)((((size_t)symtype) << 24) | (size_t)(index)))
-#define LIBBG3_SYMBOL_TYPE_OF(sym_value)  (((size_t)sym_value) >> 24)
-#define LIBBG3_SYMBOL_INDEX_OF(sym_value) (((size_t)sym_value) & 0xFFFFFF)
-extern const bg3_hash_ops symtab_hash_ops;
-extern const bg3_hash_ops symtab_case_hash_ops;
-
 typedef struct bg3_hash_entry {
   void* key;
   void* value;
@@ -202,6 +188,19 @@ uint64_t LIBBG3_API bg3_hash_default_hash_fn(void* key, void* user_data);
 bool LIBBG3_API bg3_hash_default_equal_fn(void* lhs, void* rhs, void* user_data);
 void* LIBBG3_API bg3_hash_default_copy_fn(void* value, void* user_data);
 void LIBBG3_API bg3_hash_default_free_fn(void* value, void* user_data);
+
+extern const bg3_hash_ops bg3_default_hash_ops;
+
+// For the following hash ops, keys should be null-terminated strings and values
+// should be LIBBG3_MAKE_SYMBOL_VALUE values. user_data must be a pointer to an
+// arena. keys will be copied into the arena.
+extern const bg3_hash_ops bg3_symtab_hash_ops;       // for case insensitive symbol tables
+extern const bg3_hash_ops bg3_symtab_case_hash_ops;  // same thing but case sensitive
+
+#define LIBBG3_MAKE_SYMBOL_VALUE(symtype, index) \
+  ((void*)((((size_t)symtype) << 24) | (size_t)(index)))
+#define LIBBG3_SYMBOL_TYPE_OF(sym_value)  (((size_t)sym_value) >> 24)
+#define LIBBG3_SYMBOL_INDEX_OF(sym_value) (((size_t)sym_value) & 0xFFFFFF)
 
 typedef struct bg3_cursor {
   char* start;
@@ -2281,7 +2280,7 @@ void bg3_hash_default_free_fn(void* value, void* user_data) {
   // no-op
 }
 
-const bg3_hash_ops default_hash_ops = {
+const bg3_hash_ops bg3_default_hash_ops = {
     .hash_fn = bg3_hash_default_hash_fn,
     .equal_fn = bg3_hash_default_equal_fn,
     .copy_key_fn = bg3_hash_default_copy_fn,
@@ -2475,7 +2474,7 @@ static void symtab_free_fn(void* value, void* user_data) {
   // do nothing
 }
 
-const bg3_hash_ops symtab_hash_ops = {
+const bg3_hash_ops bg3_symtab_hash_ops = {
     .hash_fn = symtab_hash_fn,
     .equal_fn = symtab_equal_fn,
     .copy_key_fn = symtab_copy_fn,
@@ -2493,7 +2492,7 @@ static bool symtab_case_equal_fn(void* lhs, void* rhs, void* user_data) {
   return !strcmp((char const*)lhs, (char const*)rhs);
 }
 
-const bg3_hash_ops symtab_case_hash_ops = {
+const bg3_hash_ops bg3_symtab_case_hash_ops = {
     .hash_fn = symtab_case_hash_fn,
     .equal_fn = symtab_case_equal_fn,
     .copy_key_fn = symtab_copy_fn,
@@ -4319,7 +4318,7 @@ typedef struct index_global {
 } index_global;
 
 static void index_symtab_init(index_symtab* symtab, bg3_arena* a) {
-  bg3_hash_init(&symtab->lookup, &symtab_case_hash_ops, a);
+  bg3_hash_init(&symtab->lookup, &bg3_symtab_case_hash_ops, a);
 }
 
 static void index_symtab_destroy(index_symtab* symtab) {
@@ -6041,11 +6040,11 @@ static bg3_hash_ops node_binding_hash_ops;
 void osiris_node_bindings_table_init(osiris_node_bindings_table* table,
                                      bg3_osiris_save* save) {
   node_binding_hash_ops = (bg3_hash_ops){
-      .hash_fn = default_hash_ops.hash_fn,
-      .equal_fn = default_hash_ops.equal_fn,
-      .copy_key_fn = default_hash_ops.copy_key_fn,
-      .free_key_fn = default_hash_ops.free_key_fn,
-      .copy_value_fn = default_hash_ops.copy_value_fn,
+      .hash_fn = bg3_default_hash_ops.hash_fn,
+      .equal_fn = bg3_default_hash_ops.equal_fn,
+      .copy_key_fn = bg3_default_hash_ops.copy_key_fn,
+      .free_key_fn = bg3_default_hash_ops.free_key_fn,
+      .copy_value_fn = bg3_default_hash_ops.copy_value_fn,
       .free_value_fn = osiris_node_bindings_destroy_op,
   };
   memset(table, 0, sizeof(osiris_node_bindings_table));
@@ -6569,8 +6568,8 @@ static bg3_status enter_variable(bg3_osiris_save_builder* builder,
 void bg3_osiris_save_builder_init(bg3_osiris_save_builder* builder) {
   memset(builder, 0, sizeof(bg3_osiris_save_builder));
   bg3_osiris_save_init(&builder->save);
-  bg3_hash_init(&builder->global_symbols, &symtab_hash_ops, &builder->save.alloc);
-  bg3_hash_init(&builder->local_symbols, &symtab_hash_ops, &builder->save.alloc);
+  bg3_hash_init(&builder->global_symbols, &bg3_symtab_hash_ops, &builder->save.alloc);
+  bg3_hash_init(&builder->local_symbols, &bg3_symtab_hash_ops, &builder->save.alloc);
   bg3_osiris_type_info builtin_integer = {.name = "INTEGER", .index = 1};
   bg3_osiris_type_info builtin_integer64 = {.name = "INTEGER64", .index = 2};
   bg3_osiris_type_info builtin_real = {.name = "REAL", .index = 3};
