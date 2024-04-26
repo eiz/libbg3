@@ -25,19 +25,33 @@ There's a multi-threaded string index builder, but most of the code that uses it
 isn't released here yet. This will likely join many other things in moving
 outside of this library soon.
 
-Requirements:
+# Requirements
 
 - Currently only tested with clang/mac. MSVC/gcc + win32/linux soon
 - lz4 and miniz libraries are required for compression. compatible versions are
   included here.
 
-Usage:
+# Usage
 
-In one C file, define `#define LIBBG3_IMPLEMENTATION` prior to including the
-header. Note that currently some unprefixed symbols leak into the TU that
-defines the implementation.
+Just copy `libbg3.h` into your project. You'll also need to add the LZ4 and
+miniz dependencies from somewhere if they're not already in your project:
+compatible versions are included in `third_party`. In one C or C++ file, define
+`#define LIBBG3_IMPLEMENTATION` prior to including the header. Note that
+currently some unprefixed symbols leak into the TU that defines the
+implementation.
 
-Several example programs are available in the examples/ directory.
+Several example programs are available in the examples/ directory. You can build
+them as follows:
+
+```
+git submodule update --init
+mkdir build && cd build
+cmake ..
+make
+```
+
+Make sure you have a compatible version of Python available to build the example
+Python module.
 
 # BUGS
 
