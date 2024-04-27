@@ -603,7 +603,9 @@ bg3_lsof_sym_ref LIBBG3_API bg3_lsof_symtab_intern(bg3_lsof_symtab* table,
                                                    char const* name);
 void LIBBG3_API bg3_lsof_symtab_write(bg3_lsof_symtab* table, bg3_buffer* buf);
 
-int LIBBG3_API bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len);
+bg3_status LIBBG3_API bg3_lsof_reader_init(bg3_lsof_reader* file,
+                                           char* data,
+                                           size_t data_len);
 void LIBBG3_API bg3_lsof_reader_destroy(bg3_lsof_reader* file);
 int LIBBG3_API bg3_lsof_reader_get_node(bg3_lsof_reader* file,
                                         bg3_lsof_node_wide* node,
@@ -2923,7 +2925,8 @@ fail:
   return false;
 }
 
-int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
+bg3_status bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
+  bg3_status status = bg3_success;
   bool created_symtab = false;
   size_t node_size, attr_size;
   memset(file, 0, sizeof(bg3_lsof_reader));
@@ -2932,17 +2935,17 @@ int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
   bg3_cursor c;
   bg3_cursor_init(&c, file->data, file->data_len);
   if (file->data_len < sizeof(bg3_lsof_header)) {
-    fprintf(stderr, "file too small\n");
+    status = bg3_error_bad_magic;
     goto fail;
   }
   bg3_cursor_read(&c, &file->header, sizeof(bg3_lsof_header));
   if (file->header.magic != LIBBG3_LSOF_MAGIC) {
-    fprintf(stderr, "invalid file magic\n");
+    status = bg3_error_bad_magic;
     goto fail;
   }
   if (file->header.version < LIBBG3_LSOF_VERSION_MIN ||
       file->header.version > LIBBG3_LSOF_VERSION_MAX) {
-    //    fprintf(stderr, "invalid file version %d\n", file->header.version);
+    status = bg3_error_bad_version;
     goto fail;
   }
   switch (LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression)) {
@@ -2998,7 +3001,7 @@ int bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
                   : sizeof(bg3_lsof_attr_slim);
   file->num_nodes = file->header.node_table.uncompressed_size / node_size;
   file->num_attrs = file->header.attr_table.uncompressed_size / attr_size;
-  return 0;
+  return status;
 fail:
   if (file->owns_sections) {
     free(file->string_table_raw);
@@ -3009,11 +3012,17 @@ fail:
   if (created_symtab) {
     bg3_lsof_symtab_destroy(&file->symtab);
   }
-  return -1;
+  return status;
 }
 
 void bg3_lsof_reader_destroy(bg3_lsof_reader* file) {
   bg3_lsof_symtab_destroy(&file->symtab);
+  if (file->owns_sections) {
+    free(file->string_table_raw);
+    free(file->node_table_raw);
+    free(file->attr_table_raw);
+    free(file->value_table_raw);
+  }
   free(file->value_offsets);
 }
 
