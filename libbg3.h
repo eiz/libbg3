@@ -427,7 +427,7 @@ typedef struct bg3_lspk_file {
   bg3_lspk_manifest_entry* manifest;
 } bg3_lspk_file;
 
-int LIBBG3_API bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped);
+bg3_status LIBBG3_API bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped);
 void LIBBG3_API bg3_lspk_file_destroy(bg3_lspk_file* file);
 bg3_status LIBBG3_API bg3_lspk_file_extract(bg3_lspk_file* file,
                                             bg3_lspk_manifest_entry* entry,
@@ -2618,20 +2618,20 @@ static inline char const* bg3_lsof_dt_name(int dt) {
   return bg3_lsof_dt_names[dt];
 }
 
-int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
+bg3_status bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
   bg3_cursor c;
   bg3_cursor_init(&c, mapped->data, mapped->data_len);
   memset(file, 0, sizeof(bg3_lspk_file));
   file->mapped = mapped;
   if (mapped->data_len < sizeof(bg3_lspk_header)) {
-    return -1;
+    return bg3_error_bad_magic;
   }
   bg3_cursor_read(&c, &file->header, sizeof(bg3_lspk_header));
   if (file->header.magic != LIBBG3_LSPK_MAGIC) {
-    return -1;
+    return bg3_error_bad_magic;
   }
   if (file->header.version != LIBBG3_LSPK_VERSION) {
-    return -1;
+    return bg3_error_bad_version;
   }
   bg3_lspk_manifest_header manifest_header;
   bg3_cursor_init(&c, mapped->data + file->header.manifest_offset,
@@ -2642,13 +2642,13 @@ int bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
   if (LZ4_decompress_safe(
           mapped->data + file->header.manifest_offset + sizeof(bg3_lspk_manifest_header),
           (char*)entries, manifest_header.compressed_size, uncompressed_size) < 0) {
-    fprintf(stderr, "failed to decompress manifest\n");
+    bg3_error("failed to decompress manifest\n");
     free(entries);
-    return -1;
+    return bg3_error_failed;
   }
   file->num_files = manifest_header.num_files;
   file->manifest = entries;
-  return 0;
+  return bg3_success;
 }
 
 void bg3_lspk_file_destroy(bg3_lspk_file* file) {
