@@ -1263,13 +1263,28 @@ typedef struct bg3_index_reader {
   char* strings;
 } bg3_index_reader;
 
+typedef struct bg3_index_search_hit {
+  bg3_index_pak_entry* pak;
+  bg3_index_file_entry* file;
+  uint32_t value;
+} bg3_index_search_hit;
+
+typedef struct bg3_index_search_results {
+  size_t num_hits;
+  bg3_index_search_hit* hits;
+} bg3_index_search_results;
+
 bg3_status LIBBG3_API bg3_index_reader_init(bg3_index_reader* reader,
                                             char* data,
                                             size_t data_len);
 void LIBBG3_API bg3_index_reader_destroy(bg3_index_reader* reader);
 bg3_index_entry* LIBBG3_API bg3_index_reader_find_entry(bg3_index_reader* reader,
                                                         uint32_t string_idx);
+void bg3_index_reader_query(bg3_index_reader* reader,
+                            bg3_index_search_results* results,
+                            char const* query);
 bg3_status LIBBG3_API bg3_index_build(int argc, char const** argv);
+void bg3_index_search_results_destroy(bg3_index_search_results* results);
 
 typedef enum bg3_surface_type {
   bg3_surface_none = 0,
@@ -4809,6 +4824,100 @@ bg3_index_entry* bg3_index_reader_find_entry(bg3_index_reader* reader,
     }
   }
   return 0;
+}
+
+typedef struct index_search_thread {
+  bg3_arena tmp;
+  bg3_index_reader* reader;
+  char const* needle;
+  size_t num_entries;
+  size_t cap_entries;
+  bg3_index_entry** entries;
+} index_search_thread;
+
+static int bg3_index_reader_search_worker(bg3_parallel_for_thread* tcb) {
+  index_search_thread* local = ((index_search_thread*)tcb->user_data) + tcb->thread_num;
+  char const* needle = local->needle;
+  int nlen = strlen(local->needle);
+  uint32_t chunk_size = local->reader->header.strings_len / tcb->thread_count;
+  uint32_t offset = chunk_size * tcb->thread_num;
+  uint32_t end =
+      LIBBG3_MIN(local->reader->header.strings_len, offset + chunk_size + nlen);
+  char const* haystack = local->reader->strings + offset;
+  int hlen = end - offset;
+  int skip[256], i, j, k;
+  if (!nlen || nlen > hlen) {
+    return (int)bg3_success;
+  }
+  for (i = 0; i < 256; ++i) {
+    skip[i] = nlen;
+  }
+  for (i = 0; i < nlen - 1; ++i) {
+    skip[needle[i] & 0xFF] = nlen - i - 1;
+  }
+  k = nlen - 1;
+  while (k < hlen) {
+    for (j = nlen - 1, i = k; j >= 0 && needle[j] == haystack[i]; --j, --i)
+      ;
+    if (j == -1) {
+      bg3_index_entry* entry = bg3_index_reader_find_entry(local->reader, offset + i + 1);
+      assert(entry);
+      if (offset + i + 1 <= entry->string_offset + entry->string_len) {
+        LIBBG3_ARRAY_PUSH(&local->tmp, local, entries, entry);
+      }
+      k += nlen;
+    } else {
+      k += skip[haystack[k] & 0xFF];
+    }
+  }
+  return (int)bg3_success;
+}
+
+void bg3_index_reader_query(bg3_index_reader* reader,
+                            bg3_index_search_results* results,
+                            char const* query) {
+  int nthreads = bg3_parallel_for_ncpu();
+  index_search_thread* threads =
+      (index_search_thread*)alloca(nthreads * sizeof(index_search_thread));
+  memset(threads, 0, sizeof(index_search_thread) * nthreads);
+  char* term = strdup(query);
+  for (char* p = term; *p; ++p) {
+    *p = tolower(*p);
+  }
+  for (int i = 0; i < nthreads; ++i) {
+    bg3_arena_init(&threads[i].tmp, 1024 * 1024, 1024);
+    threads[i].needle = term;
+    threads[i].reader = reader;
+  }
+  bg3_parallel_for(bg3_index_reader_search_worker, threads);
+  memset(results, 0, sizeof(bg3_index_search_results));
+  for (int i = 0; i < nthreads; ++i) {
+    for (size_t j = 0; j < threads[i].num_entries; ++j) {
+      results->num_hits += threads[i].entries[j]->match_len;
+    }
+  }
+  results->hits = calloc(results->num_hits, sizeof(bg3_index_search_hit));
+  int next_hit = 0;
+  for (int i = 0; i < nthreads; ++i) {
+    for (size_t j = 0; j < threads[i].num_entries; ++j) {
+      bg3_index_entry* entry = threads[i].entries[j];
+      for (size_t k = 0; k < entry->match_len; ++k) {
+        bg3_index_search_hit* hit = results->hits + next_hit++;
+        bg3_index_match_entry* match_entry = reader->matches + entry->match_index + k;
+        hit->file = reader->files + match_entry->file_idx;
+        hit->pak = reader->paks + hit->file->pak_idx;
+        hit->value = match_entry->value;
+      }
+    }
+  }
+  for (int i = 0; i < nthreads; ++i) {
+    bg3_arena_destroy(&threads[i].tmp);
+  }
+  free(term);
+}
+
+void bg3_index_search_results_destroy(bg3_index_search_results* results) {
+  free(results->hits);
 }
 
 static uint32_t aigrid_uuid_hash(bg3_uuid* id) {
