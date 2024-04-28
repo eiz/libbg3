@@ -50,9 +50,6 @@ cmake ..
 make
 ```
 
-Make sure you have a compatible version of Python available to build the example
-Python module.
-
 # BUGS
 
 - Multi-part pak files aren't loaded as I haven't needed them yet
