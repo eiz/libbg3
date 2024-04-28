@@ -4896,7 +4896,8 @@ void bg3_index_reader_query(bg3_index_reader* reader,
       results->num_hits += threads[i].entries[j]->match_len;
     }
   }
-  results->hits = calloc(results->num_hits, sizeof(bg3_index_search_hit));
+  results->hits =
+      (bg3_index_search_hit*)calloc(results->num_hits, sizeof(bg3_index_search_hit));
   int next_hit = 0;
   for (int i = 0; i < nthreads; ++i) {
     for (size_t j = 0; j < threads[i].num_entries; ++j) {
