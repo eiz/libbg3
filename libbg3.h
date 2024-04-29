@@ -501,6 +501,12 @@ typedef struct bg3_lsof_header {
 // This is set on some _merged.lsf files in Levels/ and I'm not sure what it is
 #define LIBBG3_LSOF_FLAG_UNKNOWN_1            0x2
 
+#define LIBBG3_LSOF_OWNS_STRING_TABLE 0x1
+#define LIBBG3_LSOF_OWNS_NODE_TABLE   0x2
+#define LIBBG3_LSOF_OWNS_ATTR_TABLE   0x4
+#define LIBBG3_LSOF_OWNS_VALUE_TABLE  0x8
+#define LIBBG3_LSOF_OWNS_ALL          0xF
+
 typedef struct bg3_lsof_sym_ref {
   uint16_t entry;
   uint16_t bucket;
@@ -570,7 +576,7 @@ typedef struct bg3_lsof_reader {
   char* attr_table_raw;
   char* value_table_raw;
   uint32_t* value_offsets;
-  bool owns_sections;
+  uint32_t owned_sections;
 } bg3_lsof_reader;
 
 typedef struct bg3_lsof_writer_stack_frame {
@@ -614,6 +620,7 @@ int LIBBG3_API bg3_lsof_reader_get_attr(bg3_lsof_reader* file,
                                         bg3_lsof_attr_wide* attr,
                                         size_t attr_index);
 void LIBBG3_API bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file);
+void LIBBG3_API bg3_lsof_reader_ensure_sibling_pointers(bg3_lsof_reader* file);
 int LIBBG3_API bg3_lsof_reader_print_sexp(bg3_lsof_reader* file, bg3_buffer* out);
 
 void LIBBG3_API bg3_lsof_writer_init(bg3_lsof_writer* writer);
@@ -2940,6 +2947,21 @@ fail:
   return false;
 }
 
+static void bg3_lsof_reader_destroy_sections(bg3_lsof_reader* file) {
+  if (file->owned_sections & LIBBG3_LSOF_OWNS_STRING_TABLE) {
+    free(file->string_table_raw);
+  }
+  if (file->owned_sections & LIBBG3_LSOF_OWNS_NODE_TABLE) {
+    free(file->node_table_raw);
+  }
+  if (file->owned_sections & LIBBG3_LSOF_OWNS_ATTR_TABLE) {
+    free(file->attr_table_raw);
+  }
+  if (file->owned_sections & LIBBG3_LSOF_OWNS_VALUE_TABLE) {
+    free(file->value_table_raw);
+  }
+}
+
 bg3_status bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_len) {
   bg3_status status = bg3_success;
   bool created_symtab = false;
@@ -2965,7 +2987,6 @@ bg3_status bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_l
   }
   switch (LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(file->header.compression)) {
     case LIBBG3_LSPK_ENTRY_COMPRESSION_NONE:
-      file->owns_sections = false;
       file->string_table_raw = file->data + sizeof(file->header);
       bg3_cursor_read(&c, 0, file->header.string_table.uncompressed_size);
       file->node_table_raw =
@@ -2979,7 +3000,7 @@ bg3_status bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_l
       bg3_cursor_read(&c, 0, file->header.value_table.uncompressed_size);
       break;
     case LIBBG3_LSPK_ENTRY_COMPRESSION_LZ4: {
-      file->owns_sections = true;
+      file->owned_sections = LIBBG3_LSOF_OWNS_ALL;
       size_t next_addr = sizeof(file->header);
       bool ok = true;
       bg3_cursor_read(&c, 0, file->header.string_table.compressed_size);
@@ -3018,12 +3039,7 @@ bg3_status bg3_lsof_reader_init(bg3_lsof_reader* file, char* data, size_t data_l
   file->num_attrs = file->header.attr_table.uncompressed_size / attr_size;
   return status;
 fail:
-  if (file->owns_sections) {
-    free(file->string_table_raw);
-    free(file->node_table_raw);
-    free(file->attr_table_raw);
-    free(file->value_table_raw);
-  }
+  bg3_lsof_reader_destroy_sections(file);
   if (created_symtab) {
     bg3_lsof_symtab_destroy(&file->symtab);
   }
@@ -3032,13 +3048,84 @@ fail:
 
 void bg3_lsof_reader_destroy(bg3_lsof_reader* file) {
   bg3_lsof_symtab_destroy(&file->symtab);
-  if (file->owns_sections) {
-    free(file->string_table_raw);
-    free(file->node_table_raw);
-    free(file->attr_table_raw);
-    free(file->value_table_raw);
-  }
+  bg3_lsof_reader_destroy_sections(file);
   free(file->value_offsets);
+}
+
+static void* bg3__memdup(void* src, size_t size) {
+  void* dst = malloc(size);
+  memcpy(dst, src, size);
+  return dst;
+}
+
+void bg3_lsof_reader_ensure_sibling_pointers(bg3_lsof_reader* file) {
+  if (LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS)) {
+    return;
+  }
+  bg3_lsof_reader_ensure_value_offsets(file);
+  bg3_lsof_node_ref* last_children =
+      (bg3_lsof_node_ref*)calloc(file->num_nodes + 1, sizeof(bg3_lsof_node_ref));
+  for (size_t i = 0; i < file->num_nodes + 1; ++i) {
+    last_children[i] = -1;
+  }
+  bg3_lsof_node_slim* slim_nodes = (bg3_lsof_node_slim*)file->node_table_raw;
+  bg3_lsof_node_wide* wide_nodes =
+      (bg3_lsof_node_wide*)calloc(file->num_nodes, sizeof(bg3_lsof_node_wide));
+  bg3_lsof_attr_slim* slim_attrs = (bg3_lsof_attr_slim*)file->attr_table_raw;
+  bg3_lsof_attr_wide* wide_attrs =
+      (bg3_lsof_attr_wide*)calloc(file->num_attrs, sizeof(bg3_lsof_attr_wide));
+  for (size_t i = 0; i < file->num_nodes; ++i) {
+    int32_t prev_last_child = last_children[slim_nodes[i].parent + 1];
+    if (prev_last_child != -1) {
+      wide_nodes[prev_last_child].next = i;
+    }
+    last_children[slim_nodes[i].parent + 1] = i;
+    wide_nodes[i].name = slim_nodes[i].name;
+    wide_nodes[i].parent = slim_nodes[i].parent;
+    wide_nodes[i].attrs = slim_nodes[i].attrs;
+    wide_nodes[i].next = -1;
+  }
+  for (size_t i = 0; i < file->num_attrs; ++i) {
+    wide_attrs[i].name = slim_attrs[i].name;
+    wide_attrs[i].type = slim_attrs[i].type;
+    wide_attrs[i].length = slim_attrs[i].length;
+    wide_attrs[i].next = -1;
+    if (i > 0 && slim_attrs[i].owner == slim_attrs[i - 1].owner) {
+      wide_attrs[i - 1].next = i;
+    }
+    wide_attrs[i].value = file->value_offsets[i];
+  }
+  if (file->owned_sections & LIBBG3_LSOF_OWNS_NODE_TABLE) {
+    free(file->node_table_raw);
+  }
+  if (file->owned_sections & LIBBG3_LSOF_OWNS_ATTR_TABLE) {
+    free(file->attr_table_raw);
+  }
+  file->node_table_raw = (char*)wide_nodes;
+  file->attr_table_raw = (char*)wide_attrs;
+  // Note that this breaks the correspondence between the header and the raw file->data
+  // buffer contents.
+  file->header.flags |= LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS;
+  file->owned_sections |= LIBBG3_LSOF_OWNS_NODE_TABLE | LIBBG3_LSOF_OWNS_ATTR_TABLE;
+  free(last_children);
+  free(file->value_offsets);
+  file->value_offsets = 0;
+}
+
+void bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file) {
+  bool is_wide = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
+  if (!is_wide && !file->value_offsets) {
+    size_t value_offset = 0;
+    file->value_offsets = (uint32_t*)calloc(file->num_attrs, sizeof(uint32_t));
+    for (bg3_lsof_attr_ref i = 0; i < file->num_attrs; ++i) {
+      bg3_lsof_attr_wide attr;
+      if (bg3_lsof_reader_get_attr(file, &attr, i) < 0) {
+        bg3_panic("unreachable");
+      }
+      file->value_offsets[i] = value_offset;
+      value_offset += attr.length;
+    }
+  }
 }
 
 #define MAX_FRAMES 128
@@ -3057,22 +3144,6 @@ static void fresh_line(bg3_buffer* out, lsof_print_stack* stack) {
     }
   }
   stack->is_fresh_line = true;
-}
-
-void bg3_lsof_reader_ensure_value_offsets(bg3_lsof_reader* file) {
-  bool is_wide = LIBBG3_IS_SET(file->header.flags, LIBBG3_LSOF_FLAG_HAS_SIBLING_POINTERS);
-  if (!is_wide && !file->value_offsets) {
-    size_t value_offset = 0;
-    file->value_offsets = (uint32_t*)calloc(file->num_attrs, sizeof(uint32_t));
-    for (bg3_lsof_attr_ref i = 0; i < file->num_attrs; ++i) {
-      bg3_lsof_attr_wide attr;
-      if (bg3_lsof_reader_get_attr(file, &attr, i) < 0) {
-        bg3_panic("unreachable");
-      }
-      file->value_offsets[i] = value_offset;
-      value_offset += attr.length;
-    }
-  }
 }
 
 // TODO clean up this disaster
