@@ -1,0 +1,225 @@
+[[ WARNING DRAFT DOCUMENT HAS NOT YET BEEN CHECKED FOR CORRECTNESS TBD ]]
+
+A very quick sketch of a BitKnit 2 spec:
+
+[[Notes about notation:
+  0..N is [0,N), exclusive.
+  Shifts are expressed as * and /, ^ is pow, not xor, mod is mod, not %.]]
+
+rANS encoder/decoder with L=2^16, B=2^16, M=2^15, giving a 32-bit state. 3
+symbol vocabularies.
+
+LZ-style copy commands with an 8-element LRU copy distance cache. Replacement
+algorithm inserts new entries as second to last in the LRU list for stability
+reasons.
+
+2 interleaved rANS streams, which are alternated between each time data are
+encoded or decoded.
+ 
+For literal and cache reference vocabularies, 4 interleaved probability model
+instances which are selected using the low bits of the next destination
+offset.
+
+"Deferred" adaptive probability models. Each model calculates a cumulative sum
+table every 1024 symbols seen by the model instance. The bin widths are updated
+using an exponential moving average instead of just using the frequencies from
+the most recent block of symbols. Frequencies sum to 2^15+1, with the remainder
+of (2^15+1)/vocab_size being given to the symbol that triggers the adaptation.
+
+Stream starts with magic value, 0x75B1 (in little endian, B1 75)
+
+The decompressed data is grouped into "quanta", with each quantum ending at a
+64k boundary. Note that it's possible for a copy command at the tail of a
+quantum to overlap into the next one, and this will increase the starting
+destination address of the next quantum but not its ending boundary, which is
+_always_ a 64k boundary relative to the start of the entire output, except for
+the very last quantum.
+
+Each quantum is a separate pair of rANS streams with its own state, but the
+probability models carry over. The beginning of each quantum's bitstream is
+a variable length initialization block. The encoder writes the stream for
+each quantum in reverse order, with the final rANS state being stored in
+the initialization block at the beginning of the quantum.
+
+The first byte of the output is a special case. It is always decoded by
+extracting 8 bits out of the rANS state. This is because subsequent bytes
+are delta encoded: "literals" are relative to the previously used LZ copy
+offset or the previous byte if no such copy has been done.
+
+There are 3 symbol vocabularies used for different parts of the bitstream
+syntax as well as some non-rANS data fields. The details of each vocabulary
+are listed below. In the descriptions below, the value of a symbol from the
+given vocabulary is called V.
+
+  - Command Word
+    Size: 300
+    Valid Values:
+        0..256: Written to the output as a literal byte, by [[delta decoding]].
+      256..288: A copy command with an inline copy length. The copy length is
+                set to V - 254 (minimum copy length of 2).
+      288..300: Let a value B equal V - 287. Let L be the result of extracting
+                B bits from the rANS state. The resulting copy length equals
+                2^B + L + 32.
+  - Copy Offset Cache Reference
+    Size: 40
+    Valid Values:
+       0..8: Copy offset cache hit. V is interpreted as an index into an array
+             of recently used copy offsets. The cache state is updated according
+             to [[decode command]].
+      8..40: Copy offset cache miss. The Copy Offset Length vocabulary is used
+             to decode a symbol B. Then, let L be the result of extracting B
+             mod 16 bits from the rANS state. If B >= 16, read a 16-bit value H
+             from the bitstream, and set L to (L * 2^16) + H. The copy offset
+             equals 2^B + L + V - 39.
+  - Copy Offset Length
+    Size: 21
+    Valid Values:
+      0..21: See above description of Copy Offset Cache Reference.
+
+
+Algorithms:
+
+## Initialize decoder
+1. Initialize CommandWordModels[0..4], CopyOffsetCacheModels[0..4] and
+   CopyOffsetLengthModel using [[Initialize adaptive model]] with their respective
+   vocabulary sizes. CommandWordModels is initialized with 264 equiprobable
+   symbols and 36 min-probable symbols. All other vocabularies are initialized
+   with equiprobable symbols.
+2. Initialize all 8 entries of the Copy Offset Cache to 1.
+3. Initialize SrcOffset and DstOffset to 0.
+4. Initialize LastCopyOffset to 1.
+
+## Extract bits from rANS state
+1. Let STATE1 and STATE2 be a pair of 32-bit unsigned integers containing the
+   rANS state for 2 separate streams, and B be a number of bits to extract
+   between 0 and 15, inclusive.
+2. Let V equal STATE1 mod 2^B.
+3. Assign STATE1 = STATE1 / 2^B.
+4. Execute algorithm [[renormalize]].
+5. The result of the algorithm is the extracted value V.
+
+## Renormalize
+1. Let STATE1 and STATE2 be a pair of 32-bit unsigned integers containing the
+   rANS state for 2 separate streams.
+2. If STATE1 < 65536, load a 16-bit little endian word S from the bitstream and
+   advance the source pointer by 2 bytes. Assign STATE1 = STATE1 * 2^16 + S.
+3. Swap the values of STATE1 and STATE2.
+
+## Decode symbol from rANS state
+1. Let STATE1 and STATE2 be a pair of 32-bit unsigned integers containing the
+   rANS state for 2 separate streams, and M be an adaptive probability model.
+2. Let the code word C equal STATE1 mod 2^15.
+3. Find the index S in M's cumulative distribution table such that
+   CDF[S] <= C < CDF[S + 1].
+4. Let the frequency F = CDF[S + 1] - CDF[S].
+5. Assign STATE1 = F * STATE1/2^15 + C - CDF[S].
+6. Execute algorithm [[renormalize]].
+7. Execute the algorithm [[update symbol statistics]] on M using the symbol S.
+8. The result of the algorithm is S.
+
+## Calculate symbol adaptation parameters
+1. Let M be an adaptive frequency model with a vocabulary size V, adaptation
+   interval I and a frequency bin range 2^Fbits.
+2. The symbol frequency increment SymFreqIncr equals floor((2^Fbits + 1 - V) / I).
+3. The last-symbol frequency increment SymFreqLast equals the remainder,
+   2^Fbits + 1 - V - I * SymFreqIncr.
+
+## Update symbol statistics
+1. Let M be the model to update and S be a freshly decoded symbol. Let Fa be
+   the frequency accumulation table of M and Ac be the adaptation interval
+   counter of M. Let CDF be the cumulative frequency table of M. Let V be
+   the vocabulary size of M.
+2. Increment Fa[S] by SymFreqIncr, calculated using [[Calculate symbol
+   adaptation parameters]] with Fbits=15 and I=1024.
+3. Increment Ac. If the result is less than 1024, terminate the algorithm.
+   Otherwise, reset Ac to 0 and proceed.
+4. Increment Fa[S] by SymFreqLast.
+5. Let CDF_old be the current CDF table of M. Create a new CDF table CDF_new
+   such that for i == 0..V+1:
+
+          CDF_new[i] = CDF_old[i] + (sum(Fa[0..i]) - CDF_old[i]) / 2
+
+6. Set Fa[0..V] = 1.
+
+## Initialize adaptive model
+1. Let N be the number of symbol values in the vocabulary and M be the number
+   of min-probable symbols. The first N - M symbols are assigned equal
+   probabilities and the remaining M are assigned the minimum probability.
+2. Assign a frequency Fs[i] to each symbol such that for i < N - M, the value
+   equals (2^15 - M)/(N-M), and for all i >= N - M, the value equals 1.
+3. Calculate the initial CDF[0..N+1] from these frequencies by summation.
+4. Set the frequency counter Fa[0..N] = 1. Set the adaptation counter Ac to 0.
+
+## Initialize decoder state from bitstream
+3. Read 2 16-bit little endian values, I0 and I1, from the stream.
+4. Let the initialization state, STATE_Init, equal I0 * 2^16 + I1 / 16. Let
+   STATE2_HighBitCount = I1 mod 16.
+5. As in [[renormalize]], but without swapping, if STATE_Init < 2^16, load a
+   word W from the bitstream and set STATE_Init = STATE_Init * 2^16 + W.
+6. Set STATE1 = STATE_Init / 2^STATE2_HighBitCount. As in step 5, if
+   STATE1 < 2^16, load a word W from the bitstream and set
+   STATE1 = STATE1 * 2^16 + W.
+7. Load a word W from the bitstream and set STATE2 to
+
+        (STATE_Init * 2^16 + W) mod (16 + STATE2_HighBitCount - 1)
+
+A more plain English explanation: Load an initialization stream, read the split
+position from the stream, then put the high bits into STATE1, renorm STATE1,
+then use the low bits as the high bits of STATE2 and load 16 more low bits from
+the stream.
+
+## Decode command
+1. Let CommandWordModels be an array of 4 adaptive models for the Command Word
+   vocabulary. Let Src be the array of 16-bit bitstream words and Dst be the
+   output buffer, and SrcOffset and DstOffset be offsets into the respective
+   buffers. Likewise, let CopyOffsetCacheModels be a similar array of 4 models
+   for the Copy Offset Cache Reference vocabulary.
+2. Select a model CW = CommandWordModels[DstOffset % 4]. Decode a symbol V
+   using the model. 
+3. If V is in 0..256, output the symbol as a literal byte using [[delta
+   decoding]], increment DstOffset and terminate the algorithm.
+4. If V is in 256..288, the copy length CL equals V - 254.
+5. Otherwise, V is in 288..300 and the copy length is extended. Let the extended
+   bit width B equal V - 287. Let L be the result of extracting B bits from the
+   rANS state. The copy length CL equals 2^B + L + 32.
+6. Select a model COC = CopyOffsetCacheModels[DstOffset % 4] and decode a symbol
+   CR using the Copy Offset Cache Reference vocabulary.
+7. If CR is in 0..8, the copy offset CO equals the CR'th value in the copy offset
+   cache. Update the cache state by removing the CR'th entry from its position
+   and moving it to the 0th position, while moving entries 0..CR to 1..CR+1.
+8. Otherwise CR is in 8..40 and it is a cache miss. Let CopyOffsetLengthModel be
+   a single adaptive model using the Copy Offset Length vocabulary and decode a
+   symbol B. Let L be the result of extracting B mod 16 bits from the rANS state.
+   If B >= 16, read a 16-bit value N from the bitstream, and set L to L * 2^16 + H.
+   The copy offset CO equals 2^B + L + V - 39. Replace the 8th cache entry with
+   the 7th and set the 7th cache entry to CO.
+9. Copy CL bytes forward from DstOffset - CO to DstOffset, incrementing DstOffset
+   by CL.
+10. Set LastCopyOffset to CO.
+
+## Delta decoding
+To output a byte V to destination buffer offset DstOffset, store V +
+Dst[DstOffset - LastCopyOffset], where LastCopyOffset is the most recently used
+value of CO in [[Decode command]]. The initial value of LastCopyOffset is 1.
+
+## Decode quantum
+1. Let Src, Dst, SrcOffset and DstOffset be as defined in [[decode command]].
+   Let SrcLen and DstLen be the number of bytes in the source and destination
+   buffers.
+2. Let the quantum end offset DstQuantumEnd equal the lesser of DstLen and
+   (DstOffset + 2^16) - ((DstOffset + 2^16) mod 2^16).
+3. If the word at Src+SrcOffset == 0, increment SrcOffset by 2, then copy
+   DstQuantumEnd - DstOffset bytes directly from Src to Dst, incrementing
+   their respective offsets, and terminate the algorithm.
+3. If DstOffset is >= DstQuantumEnd, terminate the algorithm.
+4. Otherwise, execute [[decode command]] and return to step 3.
+
+## Decode stream
+1. Let Src, Dst, SrcOffset and DstOffset be as defined in [[decode command]].
+   Let SrcLen and DstLen be the number of bytes in the source and destination
+   buffers.
+2. Read the first 2 bytes from the bitstream. If they're not the bytes B1 75,
+   exit with an error.
+3. If DstOffset is >= DstLen, terminate with a status of success. Otherwise, if
+   SrcOffset is >= SrcLen, terminate with failure.
+4. Otherwise, execute [[decode quantum]] and then return to step 3.
