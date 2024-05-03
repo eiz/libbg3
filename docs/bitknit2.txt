@@ -149,7 +149,7 @@ the stream.
    output buffer, and SrcOffset and DstOffset be offsets into the respective
    buffers. Likewise, let CopyOffsetCacheModels be a similar array of 4 models
    for the Copy Offset Cache Reference vocabulary.
-2. Select a model CW = CommandWordModels[DstOffset % 4]. Decode a symbol V
+2. Select a model CW = CommandWordModels[DstOffset mod 4]. Decode a symbol V
    using the model. 
 3. If V is in 0..256, output the symbol as a literal byte using [[delta
    decoding]], increment DstOffset and terminate the algorithm.
@@ -157,8 +157,8 @@ the stream.
 5. Otherwise, V is in 288..300 and the copy length is extended. Let the extended
    bit width B equal V - 287. Let L be the result of extracting B bits from the
    rANS state. The copy length CL equals 2^B + L + 32.
-6. Select a model COC = CopyOffsetCacheModels[DstOffset % 4] and decode a symbol
-   CR using the Copy Offset Cache Reference vocabulary.
+6. Select a model COC = CopyOffsetCacheModels[DstOffset mod 4] and decode a
+   symbol CR using the Copy Offset Cache Reference vocabulary.
 7. If CR is in 0..8, the copy offset CO equals the CR'th value in the copy offset
    cache. Update the cache state by removing the CR'th entry from its position
    and moving it to the 0th position, while moving entries 0..CR to 1..CR+1.
