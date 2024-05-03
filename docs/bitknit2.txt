@@ -24,7 +24,8 @@ offset.
 table every 1024 symbols seen by the model instance. The bin widths are updated
 using an exponential moving average instead of just using the frequencies from
 the most recent block of symbols. Frequencies sum to 2^15+1, with the remainder
-of (2^15+1)/vocab_size being given to the symbol that triggers the adaptation.
+after summing all the counted symbol frequencies being added to the symbol which
+triggered the adaptation.
 
 Stream starts with magic value, 0x75B1 (in little endian, B1 75)
 
@@ -152,7 +153,7 @@ Algorithms:
 
 ## Initialize decoder state from bitstream
 3. Read 2 16-bit little endian values, I0 and I1, from the stream.
-4. Let the initialization state, STATE_Init, equal I0 * 2^16 + I1 / 16. Let
+4. Let the initialization state, STATE_Init, equal (I0 * 2^16 + I1) / 16. Let
    STATE2_HighBitCount = I1 mod 16.
 5. As in [[renormalize]], but without swapping, if STATE_Init < 2^16, load a
    word W from the bitstream and set STATE_Init = STATE_Init * 2^16 + W.
@@ -191,8 +192,8 @@ the stream.
    a single adaptive model using the Copy Offset Length vocabulary and decode a
    symbol B. Let L be the result of extracting B mod 16 bits from the rANS state.
    If B >= 16, read a 16-bit value N from the bitstream, and set L to L * 2^16 + H.
-   The copy offset CO equals 2^B + L + V - 39. Replace the 8th cache entry with
-   the 7th and set the 7th cache entry to CO.
+   The copy offset CO equals 2^B + L + V - 39. Replace the last cache entry with
+   the second to last and set the second to last cache entry to CO.
 9. Copy CL bytes forward from DstOffset - CO to DstOffset, incrementing DstOffset
    by CL.
 10. Set LastCopyOffset to CO.
@@ -212,7 +213,9 @@ value of CO in [[Decode command]]. The initial value of LastCopyOffset is 1.
    DstQuantumEnd - DstOffset bytes directly from Src to Dst, incrementing
    their respective offsets, and terminate the algorithm.
 3. If DstOffset is >= DstQuantumEnd, terminate the algorithm.
-4. Otherwise, execute [[decode command]] and return to step 3.
+4. If DstOffset equals 0, decode the first byte of the output by extracting
+   8 bits from the rANS state, increment DstOffset and return to step 3.
+5. Otherwise, execute [[decode command]] and return to step 3.
 
 ## Decode stream
 1. Let Src, Dst, SrcOffset and DstOffset be as defined in [[decode command]].
