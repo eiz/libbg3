@@ -208,7 +208,7 @@ value of CO in [[Decode command]]. The initial value of LastCopyOffset is 1.
    Let SrcLen and DstLen be the number of bytes in the source and destination
    buffers.
 2. Let the quantum end offset DstQuantumEnd equal the lesser of DstLen and
-   (DstOffset + 2^16) - ((DstOffset + 2^16) mod 2^16).
+   DstOffset + 2^16 - DstOffset mod 2^16.
 3. If the word at Src+SrcOffset == 0, increment SrcOffset by 2, then copy
    DstQuantumEnd - DstOffset bytes directly from Src to Dst, incrementing
    their respective offsets, and terminate the algorithm.
