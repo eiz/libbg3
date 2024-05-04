@@ -105,9 +105,12 @@ Algorithms:
    buffers.
 2. Read the first 2 bytes from the bitstream. If they're not the bytes B1 75,
    exit with an error.
-3. If DstOffset is >= DstLen, terminate with a status of success. Otherwise, if
-   SrcOffset is >= SrcLen, terminate with failure.
+3. If DstOffset is == DstLen, go to step 5. Otherwise, if SrcOffset is >=
+   SrcLen, terminate with failure.
 4. Otherwise, execute [[decode quantum]] and then return to step 3.
+5. The final values of STATE1 and STATE2 must be 2^16. DstOffset must equal
+   DstLen. Terminate success if the postconditions are valid, otherwise with
+   an error.
 
 ## Decode quantum
 1. Let Src, Dst, SrcOffset and DstOffset be as defined in [[decode command]].
@@ -125,7 +128,7 @@ Algorithms:
    8 bits from the rANS state, increment DstOffset and return to step 3.
 7. Otherwise, execute [[decode command]] and return to step 3.
 
-## Initialize decoder state from bitstream
+## Initialize rANS state from bitstream
 1. Read 2 16-bit little endian values, I0 and I1, from the stream.
 2. Let the initialization state, STATE_Init, equal (I0 * 2^16 + I1) / 16. Let
    STATE2_HighBitCount = I1 mod 16.
@@ -136,12 +139,14 @@ Algorithms:
    STATE1 = STATE1 * 2^16 + W.
 5. Load a word W from the bitstream and set STATE2 to:
 
-        (STATE_Init * 2^16 + W) mod (16 + STATE2_HighBitCount - 1)
+                        2^(16 + STATE2_HighBitCount) +
+           (STATE_Init * 2^16 + W) mod 2^(16 + STATE2_HighBitCount)
 
 A more plain English explanation: Load an initialization stream, read the split
 position from the stream, then put the high bits into STATE1, renorm STATE1,
 then use the low bits as the high bits of STATE2 and load 16 more low bits from
-the stream.
+the stream. Since STATE2 is always >= 2^16, an extra bit is always set,
+reducing the number of bits needed by the split by 1.
 
 ## Decode command
 1. Let CommandWordModels be an array of 4 adaptive models for the Command Word
