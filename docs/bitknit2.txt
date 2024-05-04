@@ -23,9 +23,9 @@ offset.
 "Deferred" adaptive probability models. Each model calculates a cumulative sum
 table every 1024 symbols seen by the model instance. The bin widths are updated
 using an exponential moving average instead of just using the frequencies from
-the most recent block of symbols. Frequencies sum to 2^15+1, with the remainder
-after summing all the counted symbol frequencies being added to the symbol which
-triggered the adaptation.
+the most recent block of symbols. Frequencies sum to 2^15, with the remainder
+after summing all the counted symbol frequencies being added to the symbol
+which triggered the adaptation.
 
 Stream starts with magic value, 0x75B1 (in little endian, B1 75)
 
@@ -94,10 +94,15 @@ Algorithms:
 1. Let N be the number of symbol values in the vocabulary and M be the number
    of min-probable symbols. The first N - M symbols are assigned equal
    probabilities and the remaining M are assigned the minimum probability.
-2. Assign a frequency Fs[i] to each symbol such that for i < N - M, the value
-   equals (2^15 - M)/(N-M), and for all i >= N - M, the value equals 1.
-3. Calculate the initial CDF[0..N+1] from these frequencies by summation.
-4. Set the frequency counter Fa[0..N] = 1. Set the adaptation counter Ac to 0.
+2. Set the initial CDF[0..N+1] such that for i < N - M,
+
+                      CDF[i] = (2^15 - M) * i / (N - M),
+
+   and for i >= N - M,
+
+                           CDF[i] = 2^15 - N + i.
+
+3. Set the frequency counter Fa[0..N] = 1. Set the adaptation counter Ac to 0.
 
 ## Decode stream
 1. Let Src, Dst, SrcOffset and DstOffset be as defined in [[decode command]].
@@ -213,7 +218,7 @@ value of CO in [[Decode command]]. The initial value of LastCopyOffset is 1.
 ## Calculate symbol adaptation parameters
 1. Let M be an adaptive frequency model with a vocabulary size V, adaptation
    interval I and a frequency bin range 2^Fbits.
-2. The symbol frequency increment SymFreqIncr equals floor((2^Fbits + 1 - V) / I).
+2. The symbol frequency increment SymFreqIncr equals floor((2^Fbits - V) / I).
 3. The last-symbol frequency increment SymFreqLast equals the remainder,
    2^Fbits + 1 - V - I * SymFreqIncr.
 
