@@ -4,7 +4,8 @@ A very quick sketch of a BitKnit 2 spec:
 
 [[Notes about notation:
   0..N is [0,N), exclusive.
-  Shifts are expressed as * and /, ^ is pow, not xor, mod is mod, not %.]]
+  Shifts are expressed as * and /, ^ is pow, not xor, mod is mod, not %.
+  Division is truncating integer division.]]
 
 rANS encoder/decoder with L=2^16, B=2^16, M=2^15, giving a 32-bit state. 3
 symbol vocabularies.
@@ -71,7 +72,7 @@ given vocabulary is called V.
              to decode a symbol B. Then, let L be the result of extracting B
              mod 16 bits from the rANS state. If B >= 16, read a 16-bit value H
              from the bitstream, and set L to (L * 2^16) + H. The copy offset
-             equals 2^B + L + V - 39.
+             equals 2^(5 + B) + 2^5 * L + V - 39.
   - Copy Offset Length
     Size: 21
     Valid Values:
@@ -96,7 +97,7 @@ Algorithms:
    probabilities and the remaining M are assigned the minimum probability.
 2. Set the initial CDF[0..N+1] such that for i < N - M,
 
-                      CDF[i] = (2^15 - M) * i / (N - M),
+                      CDF[i] = (2^15 - M) * i / (N - M)
 
    and for i >= N - M,
 
@@ -176,8 +177,9 @@ reducing the number of bits needed by the split by 1.
    a single adaptive model using the Copy Offset Length vocabulary and decode a
    symbol B. Let L be the result of extracting B mod 16 bits from the rANS state.
    If B >= 16, read a 16-bit value N from the bitstream, and set L to L * 2^16 + H.
-   The copy offset CO equals 2^B + L + V - 39. Replace the last cache entry with
-   the second to last and set the second to last cache entry to CO.
+   The copy offset CO equals 2^(5 + B) + 2^5 * L + V - 39. Replace the last
+   cache entry with the second to last and set the second to last cache entry
+   to CO.
 9. Copy CL bytes forward from DstOffset - CO to DstOffset, incrementing DstOffset
    by CL.
 10. Set LastCopyOffset to CO.
@@ -218,7 +220,7 @@ value of CO in [[Decode command]]. The initial value of LastCopyOffset is 1.
 ## Calculate symbol adaptation parameters
 1. Let M be an adaptive frequency model with a vocabulary size V, adaptation
    interval I and a frequency bin range 2^Fbits.
-2. The symbol frequency increment SymFreqIncr equals floor((2^Fbits - V) / I).
+2. The symbol frequency increment SymFreqIncr equals (2^Fbits - V) / I.
 3. The last-symbol frequency increment SymFreqLast equals the remainder,
    2^Fbits + 1 - V - I * SymFreqIncr.
 
