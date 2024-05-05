@@ -1155,10 +1155,11 @@ typedef struct bg3_granny_reader {
 } bg3_granny_reader;
 
 void LIBBG3_API bg3_granny_reader_destroy(bg3_granny_reader* reader);
-bg3_status LIBBG3_API bg3_granny_reader_init(bg3_granny_reader* reader,
-                                             char* data,
-                                             size_t data_len,
-                                             bg3_granny_compressor_ops* compressor_ops);
+bg3_status LIBBG3_API
+bg3_granny_reader_init(bg3_granny_reader* reader,
+                       char* data,
+                       size_t data_len,
+                       bg3_granny_compressor_ops const* compressor_ops);
 bg3_granny_obj_root* LIBBG3_API bg3_granny_reader_get_root(bg3_granny_reader* reader);
 bg3_granny_type_info* LIBBG3_API
 bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
@@ -3949,7 +3950,7 @@ bg3_status bg3_patch_file_dump(bg3_patch_file* file) {
   return bg3_success;
 }
 
-static bg3_status bg3_granny_decompress_bitknit(bg3_granny_compressor_ops* ops,
+static bg3_status bg3_granny_decompress_bitknit(bg3_granny_compressor_ops const* ops,
                                                 char* output,
                                                 size_t output_len,
                                                 char* input,
@@ -3989,7 +3990,7 @@ void bg3_granny_reader_destroy(bg3_granny_reader* reader) {
 bg3_status bg3_granny_reader_init(bg3_granny_reader* reader,
                                   char* data,
                                   size_t data_len,
-                                  bg3_granny_compressor_ops* compressor_ops) {
+                                  bg3_granny_compressor_ops const* compressor_ops) {
   bg3_status status = bg3_success;
   memset(reader, 0, sizeof(bg3_granny_reader));
   reader->data = data;
