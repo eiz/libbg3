@@ -3960,7 +3960,6 @@ static bg3_status bg3_granny_decompress_bitknit(bg3_granny_compressor_ops const*
   }
   if (!ops->begin_file_decompression || !ops->decompress_incremental ||
       !ops->end_file_decompression) {
-    printf("unsupported\n");
     return bg3_error_unsupported;
   }
   bool ok = true;
@@ -3972,9 +3971,6 @@ static bg3_status bg3_granny_decompress_bitknit(bg3_granny_compressor_ops const*
   }
   ok = ops->decompress_incremental(context, input_len, input);
   ops->end_file_decompression(context);
-  if (!ok) {
-    printf("codec failure\n");
-  }
   return ok ? bg3_success : bg3_error_failed;
 }
 
