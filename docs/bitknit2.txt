@@ -239,5 +239,7 @@ value of CO in [[Decode command]]. The initial value of LastCopyOffset is 1.
 
           CDF_new[i] = CDF_old[i] + (sum(Fa[0..i]) - CDF_old[i]) / 2
 
+   Note that the division MUST be done in 32-bit and then truncated.
+
 6. Set Fa[0..V] = 1.
 
