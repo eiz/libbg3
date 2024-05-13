@@ -1950,9 +1950,6 @@ bg3_status LIBBG3_API bg3_osiris_save_builder_finish(bg3_osiris_save_builder* bu
 #include <sys/sysctl.h>
 #endif
 
-// FIXME: some struct definitions in here use nonportable constructs (bitfields)
-// for laying out file structs
-
 // utilities
 
 static inline uint32_t bg3__next_power_of_2(uint32_t v) {
@@ -3833,7 +3830,11 @@ bg3_status bg3_patch_file_init(bg3_patch_file* file, char* data, size_t data_len
     file->normal_map_cols = norm_cols;
   }
   for (int i = 0; i < 2; ++i) {
-    if (c.ptr < c.end) {
+    // TODO: still need to figure out the function of the bounds here and the
+    // right way to read this
+    if (c.ptr < c.end &&
+        file->metadata.key_bounds[i].x0 < file->metadata.key_bounds[i].x1 &&
+        file->metadata.key_bounds[i].y0 < file->metadata.key_bounds[i].y1) {
       file->num_keys++;
       file->keys[i].bounds = (bg3_patch_key_bounds*)c.ptr;
       bg3_cursor_read(&c, 0, 0x40);
