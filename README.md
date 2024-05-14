@@ -14,8 +14,7 @@ Supported formats:
 - .loca (ditto)
 - aigrid.data (only version 21, the latest as of patch 6)
 - .patch (does not support writing compressed normal maps)
-- .gr2 (read only, compressed files require an external codec, see
-  `examples/granny.c` for an implementation with BitKnit2 support)
+- .gr2 (read only, see https://github.com/eiz/pybg3 for compression support)
 
 Support for the text based formats is generally out of scope for this library.
 
@@ -52,7 +51,6 @@ make
 
 # BUGS
 
-- Multi-part pak files aren't loaded as I haven't needed them yet
 - There is a very rarely used Osiris feature, "always enabled" rules that don't
   belong to a goal, which is used for 4 rules related to the shadow curse. These
   currently don't roundtrip properly and are lost when recompiling the story
