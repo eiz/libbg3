@@ -131,81 +131,8 @@ int main(int argc, char const** argv) {
     return 1;
   }
   bg3_granny_type_info* root_type = bg3_granny_reader_get_root_type(&reader);
-  bg3_granny_obj_root* root = bg3_granny_reader_get_root(&reader);
   printf("File schema:\n");
   print_granny_type(root_type, 0);
-  printf("From file: %s\n", root->from_file_name);
-  printf("Extended data: %p\n", root->extended_data.obj);
-  if (root->art_tool_info) {
-    printf("Art tool: %s\n", root->art_tool_info->from_art_tool_name);
-  }
-  printf("Textures: %d\n", root->num_textures);
-  printf("Materials: %d\n", root->num_materials);
-  printf("Skeletons: %d\n", root->num_skeletons);
-  printf("Vertex datas: %d\n", root->num_vertex_datas);
-  printf("Tri topologies: %d\n", root->num_tri_topologies);
-  printf("Meshes: %d\n", root->num_meshes);
-  printf("Models: %d\n", root->num_models);
-  printf("Track groups: %d\n", root->num_track_groups);
-  printf("Animations: %d\n", root->num_animations);
-  for (int i = 0; i < root->num_meshes; ++i) {
-    char nbuf[1024];
-    snprintf(nbuf, 1024, "tmp/%s.obj", root->meshes[i]->name);
-    FILE* fp = fopen(nbuf, "wb");
-    if (!fp) {
-      perror("fopen");
-      continue;
-    }
-    printf("mesh %s\n", root->meshes[i]->name);
-    printf("  ext %p\n", root->meshes[i]->extended_data.obj);
-    if (root->meshes[i]->extended_data.obj) {
-      bg3_granny_obj_ls_mesh* ls_mesh =
-          (bg3_granny_obj_ls_mesh*)root->meshes[i]->extended_data.obj;
-      bg3_granny_obj_ls_user_mesh_properties* props = ls_mesh->user_mesh_properties;
-      printf("    version %d\n", ls_mesh->lsm_version);
-      printf("    lod %d\n", props->lod);
-      printf("    num_format_descs %d\n", props->num_format_descs);
-      printf("    lod_distance %f\n", props->lod_distance);
-      printf("    is_impostor %d\n", props->is_impostor);
-      printf("    ext %p\n", props->extended_data.obj);
-      print_granny_type(root->meshes[i]->extended_data.type, 2);
-    }
-    bg3_granny_obj_vertex_data* vdata = root->meshes[i]->primary_vertex_data;
-    bg3_granny_obj_tri_topology* topo = root->meshes[i]->primary_topology;
-    printf("  vertices %p %d\n", vdata->vertices.items, vdata->vertices.num_items);
-    printf("  indices %p %d indices16 %p %d\n", topo->indices, topo->num_indices,
-           topo->indices16, topo->num_indices16);
-    bg3_granny_obj_ls_vertex* vertices = (bg3_granny_obj_ls_vertex*)vdata->vertices.items;
-    for (int32_t j = 0; j < vdata->vertices.num_items; ++j) {
-      bg3_granny_obj_ls_vertex v = vertices[j];
-      fprintf(fp, "v %f %f %f\n", v.position[0], v.position[1], v.position[2]);
-    }
-    for (int32_t j = 0; j < topo->num_indices16; j += 3) {
-      fprintf(fp, "f %d %d %d\n", topo->indices16[j] + 1, topo->indices16[j + 1] + 1,
-              topo->indices16[j + 2] + 1);
-    }
-    for (int32_t j = 0; j < topo->num_indices; j += 3) {
-      fprintf(fp, "f %d %d %d\n", topo->indices[j] + 1, topo->indices[j + 1] + 1,
-              topo->indices[j + 2] + 1);
-    }
-    fclose(fp);
-#if 0
-        for (int32_t j = 0; j < vdata->vertices.num_items; ++j) {
-            granny_obj_ls_vertex v = vertices[j];
-            vec4 qt = {v.qtangent[0] / 32767.0, v.qtangent[1] / 32767.0,
-                       v.qtangent[2] / 32767.0, v.qtangent[3] / 32767.0};
-            mat4x4 rot;
-            mat4x4_from_quat(rot, qt);
-            vec3 norm = {rot[0][0], rot[0][1], rot[0][2]};
-            printf("pos (%f,%f,%f) norm (%f,%f,%f) mag %f uv (%f,%f)\n",
-                   v.position[0], v.position[1], v.position[2], rot[0][0],
-                   rot[0][1], rot[0][2], vec3_len(norm),
-                   (double)v.texture_coordinates0[0],
-                   (double)v.texture_coordinates0[1]);
-        }
-#endif
-    print_granny_type(vdata->vertices.type, 4);
-  }
   bg3_granny_reader_destroy(&reader);
   return bg3_error_failed;
 }

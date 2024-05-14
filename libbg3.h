@@ -895,232 +895,6 @@ typedef struct LIBBG3_GRANNY_PACK bg3_granny_transform {
   bg3_vec3 scale_shear[3];
 } bg3_granny_transform;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_texture_layout {
-  int32_t bytes_per_pixel;
-  int32_t shift_for_component[4];
-  int32_t bits_for_component[4];
-} bg3_granny_texture_layout;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_art_tool_info {
-  char* from_art_tool_name;
-  int32_t art_tool_major_revision;
-  int32_t art_tool_minor_revision;
-  int32_t art_tool_pointer_size;
-  float units_per_meter;
-  bg3_vec3 origin;
-  bg3_vec3 right_vector;
-  bg3_vec3 up_vector;
-  bg3_vec3 back_vector;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_art_tool_info;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_exporter_info {
-  char* exporter_name;
-  int32_t exporter_major_revision;
-  int32_t exporter_minor_revision;
-  int32_t exporter_customization;
-  int32_t exporter_build_number;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_exporter_info;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_mip_level {
-  int32_t stride;
-  int32_t num_pixel_bytes;
-  uint8_t* pixel_bytes;
-} bg3_granny_obj_mip_level;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_texture {
-  char* from_file_name;
-  int32_t texture_type;
-  int32_t width;
-  int32_t height;
-  int32_t encoding;
-  int32_t sub_format;
-  bg3_granny_texture_layout layout;
-  int32_t num_images;
-  bg3_granny_obj_mip_level** images;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_texture;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_material {
-  uint8_t dummy;
-} bg3_granny_obj_material;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_bone {
-  char* name;
-  int32_t parent_index;
-  bg3_granny_transform local_transform;
-  bg3_mat4x4 inverse_world_4x4;
-  float lod_error;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_bone;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_skeleton {
-  char* name;
-  int32_t num_bones;
-  bg3_granny_obj_bone* bones;
-  int32_t lod_type;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_skeleton;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_vertex_annotation_set {
-  char* name;
-  bg3_granny_variant_array vertex_annotations;
-  int32_t indices_map_from_vertex_to_annotation;
-  int32_t num_vertex_annotation_indices;
-  int32_t* vertex_annotation_indices;
-} bg3_granny_obj_vertex_annotation_set;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_vertex_data {
-  bg3_granny_variant_array vertices;
-  int32_t num_vertex_component_names;
-  char** vertex_component_names;
-  int32_t num_vertex_annotation_sets;
-  bg3_granny_obj_vertex_annotation_set* vertex_annotation_sets;
-} bg3_granny_obj_vertex_data;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_material_group {
-  uint8_t dummy;
-} bg3_granny_obj_material_group;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_tri_annotation_set {
-  char* name;
-  bg3_granny_variant_array tri_annotations;
-  int32_t indices_map_from_tri_to_annotation;
-  int32_t num_tri_annotation_indices;
-  int32_t* tri_annotation_indices;
-} bg3_granny_obj_tri_annotation_set;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_tri_topology {
-  int32_t num_groups;
-  bg3_granny_obj_material_group* groups;
-  int32_t num_indices;
-  int32_t* indices;
-  int32_t num_indices16;
-  uint16_t* indices16;
-  int32_t num_vertex_to_vertex_maps;
-  int32_t* vertex_to_vertex_map;
-  int32_t num_vertex_to_triangle_maps;
-  int32_t* vertex_to_triangle_map;
-  int32_t num_side_to_neighbor_maps;
-  int32_t* side_to_neighbor_map;
-  int32_t num_polygon_to_index_starts;
-  int32_t* polygon_to_index_starts;
-  int32_t num_polygon_indices;
-  int32_t* polygon_indices;
-  int32_t num_bones_for_triangle;
-  int32_t* bones_for_triangle;
-  int32_t num_triangle_to_bone_indices;
-  int32_t* triangle_to_bone_indices;
-  int32_t num_tri_annotation_sets;
-  bg3_granny_obj_tri_annotation_set* tri_annotation_sets;
-} bg3_granny_obj_tri_topology;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_morph_target {
-  char* scalar_name;
-  bg3_granny_obj_vertex_data* vertex_data;
-  int32_t data_is_deltas;
-} bg3_granny_obj_morph_target;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_bone_binding {
-  char* bone_name;
-  bg3_vec3 obb_min;
-  bg3_vec3 obb_max;
-  int32_t num_triangle_indices;
-  int32_t* triangle_indices;
-} bg3_granny_obj_bone_binding;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_mesh {
-  char* name;
-  bg3_granny_obj_vertex_data* primary_vertex_data;
-  int32_t num_morph_targets;
-  bg3_granny_obj_morph_target* morph_targets;
-  bg3_granny_obj_tri_topology* primary_topology;
-  int32_t num_material_bindings;
-  bg3_granny_obj_material** material_bindings;
-  int32_t num_bone_bindings;
-  bg3_granny_obj_bone_binding* bone_bindings;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_mesh;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_model {
-  char* name;
-  bg3_granny_obj_skeleton* skeleton;
-  bg3_granny_transform initial_placement;
-  int32_t num_mesh_bindings;
-  bg3_granny_obj_mesh** mesh_bindings;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_model;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_track_group {
-  uint8_t dummy;
-} bg3_granny_obj_track_group;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_animation {
-  uint8_t dummy;
-} bg3_granny_obj_animation;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_root {
-  bg3_granny_obj_art_tool_info* art_tool_info;
-  bg3_granny_obj_exporter_info* exporter_info;
-  char* from_file_name;
-  int32_t num_textures;
-  bg3_granny_obj_texture** textures;
-  int32_t num_materials;
-  bg3_granny_obj_material** materials;
-  int32_t num_skeletons;
-  bg3_granny_obj_skeleton** skeletons;
-  int32_t num_vertex_datas;
-  bg3_granny_obj_vertex_data** vertex_datas;
-  int32_t num_tri_topologies;
-  bg3_granny_obj_tri_topology** tri_topologies;
-  int32_t num_meshes;
-  bg3_granny_obj_mesh** meshes;
-  int32_t num_models;
-  bg3_granny_obj_model** models;
-  int32_t num_track_groups;
-  bg3_granny_obj_track_group** track_groups;
-  int32_t num_animations;
-  bg3_granny_obj_animation** animations;
-  bg3_granny_variant extended_data;
-} bg3_granny_obj_root;
-
-// Larian extensions
-
-// There's probably other vertex formats in the game, but this is the one I
-// care about rn
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_vertex {
-  bg3_vec3 position;
-  int16_t qtangent[4];
-  bg3_half texture_coordinates0[2];
-} bg3_granny_obj_ls_vertex;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_format_desc {
-  int8_t stream;
-  uint8_t usage;
-  uint8_t usage_index;
-  uint8_t ref_type;
-  uint8_t format;
-  uint8_t size;
-} bg3_granny_obj_ls_format_desc;
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_user_mesh_properties {
-  uint32_t flags[4];
-  int32_t lod;
-  int32_t num_format_descs;
-  bg3_granny_obj_ls_format_desc* format_descs;
-  bg3_granny_variant extended_data;
-  float lod_distance;
-  int32_t is_impostor;
-} bg3_granny_obj_ls_user_mesh_properties;
-
-#define LIBBG3_GRANNY_LS_VERSION 3  // expected value of lsm_version
-
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_obj_ls_mesh {
-  bg3_granny_obj_ls_user_mesh_properties* user_mesh_properties;
-  int32_t lsm_version;
-} bg3_granny_obj_ls_mesh;
-
 // End Granny3D on-disk structures
 
 typedef size_t bg3_fn_granny_decompress_data(int type,
@@ -1170,7 +944,7 @@ bg3_granny_reader_init(bg3_granny_reader* reader,
                        char* data,
                        size_t data_len,
                        bg3_granny_compressor_ops const* compressor_ops);
-bg3_granny_obj_root* LIBBG3_API bg3_granny_reader_get_root(bg3_granny_reader* reader);
+void* LIBBG3_API bg3_granny_reader_get_root(bg3_granny_reader* reader);
 bg3_granny_type_info* LIBBG3_API
 bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 
@@ -4122,12 +3896,11 @@ bg3_granny_type_info* bg3_granny_reader_get_root_type(bg3_granny_reader* reader)
   return (bg3_granny_type_info*)c.ptr;
 }
 
-bg3_granny_obj_root* bg3_granny_reader_get_root(bg3_granny_reader* reader) {
+void* bg3_granny_reader_get_root(bg3_granny_reader* reader) {
   bg3_granny_section_ptr root_type = reader->header.root_type;
   bg3_granny_section* section = &reader->sections[root_type.section];
-  bg3_granny_obj_root* root =
-      (bg3_granny_obj_root*)(reader->sections[reader->header.root_obj.section].data +
-                             reader->header.root_obj.offset);
+  void* root = (void*)(reader->sections[reader->header.root_obj.section].data +
+                       reader->header.root_obj.offset);
   return root;
 }
 
