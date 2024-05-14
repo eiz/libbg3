@@ -948,6 +948,29 @@ void* LIBBG3_API bg3_granny_reader_get_root(bg3_granny_reader* reader);
 bg3_granny_type_info* LIBBG3_API
 bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 
+// granite tile set
+
+#define LIBBG3_GTS_MAGIC   0x47505247  // 'GRPG' in little endian
+#define LIBBG3_GTS_VERSION 5
+
+typedef struct bg3_gts_header {
+  uint32_t magic;
+  uint32_t version;
+  uint32_t unk0[9];
+  uint32_t unk_offset;
+  // ...
+  // suspect header len is 0xC0?
+} bg3_gts_header;
+
+typedef struct bg3_gts_reader {
+  bg3_gts_header header;
+} bg3_gts_reader;
+
+bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
+                                          char* data,
+                                          size_t data_len);
+void LIBBG3_API bg3_gts_reader_destroy(bg3_gts_reader* reader);
+void LIBBG3_API bg3_gts_reader_dump(bg3_gts_reader* reader);
 // sexp lexer
 
 typedef enum bg3_sexp_token_type {
@@ -3902,6 +3925,32 @@ void* bg3_granny_reader_get_root(bg3_granny_reader* reader) {
   void* root = (void*)(reader->sections[reader->header.root_obj.section].data +
                        reader->header.root_obj.offset);
   return root;
+}
+
+bg3_status bg3_gts_reader_init(bg3_gts_reader* reader, char* data, size_t data_len) {
+  memset(reader, 0, sizeof(bg3_gts_reader));
+  if (data_len < sizeof(bg3_gts_header)) {
+    return bg3_error_bad_magic;
+  }
+  bg3_cursor c;
+  bg3_cursor_init(&c, data, data_len);
+  bg3_cursor_read(&c, &reader->header, sizeof(bg3_gts_header));
+  if (reader->header.magic != LIBBG3_GTS_MAGIC) {
+    return bg3_error_bad_magic;
+  }
+  if (reader->header.version != LIBBG3_GTS_VERSION) {
+    return bg3_error_bad_version;
+  }
+  return bg3_success;
+}
+
+void bg3_gts_reader_destroy(bg3_gts_reader* reader) {
+  // nothing to do
+}
+
+void bg3_gts_reader_dump(bg3_gts_reader* reader) {
+  printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
+  printf("unk offset %08X\n", reader->header.unk_offset);
 }
 
 void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src) {
