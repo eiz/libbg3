@@ -420,14 +420,24 @@ typedef struct bg3_lspk_manifest_entry {
   uint32_t uncompressed_size;
 } bg3_lspk_manifest_entry;
 
+typedef struct bg3_lspk_part {
+  char* data;
+  size_t data_len;
+} bg3_lspk_part;
+
 typedef struct bg3_lspk_file {
   bg3_mapped_file* mapped;
   bg3_lspk_header header;
   size_t num_files;
   bg3_lspk_manifest_entry* manifest;
+  bg3_lspk_part* parts;
 } bg3_lspk_file;
 
 bg3_status LIBBG3_API bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped);
+bg3_status LIBBG3_API bg3_lspk_file_attach_part(bg3_lspk_file* file,
+                                                size_t part_num,
+                                                char* data,
+                                                size_t data_len);
 void LIBBG3_API bg3_lspk_file_destroy(bg3_lspk_file* file);
 bg3_status LIBBG3_API bg3_lspk_file_extract(bg3_lspk_file* file,
                                             bg3_lspk_manifest_entry* entry,
@@ -2655,6 +2665,9 @@ bg3_status bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
   if (file->header.version != LIBBG3_LSPK_VERSION) {
     return bg3_error_bad_version;
   }
+  if (!file->header.num_parts) {
+    bg3_panic("pak file invariant violated: num_parts > 0");
+  }
   bg3_lspk_manifest_header manifest_header;
   bg3_cursor_init(&c, mapped->data + file->header.manifest_offset,
                   mapped->data_len - file->header.manifest_offset);
@@ -2668,13 +2681,30 @@ bg3_status bg3_lspk_file_init(bg3_lspk_file* file, bg3_mapped_file* mapped) {
     free(entries);
     return bg3_error_failed;
   }
+  file->parts = (bg3_lspk_part*)calloc(file->header.num_parts, sizeof(bg3_lspk_part));
+  file->parts[0] = (bg3_lspk_part){mapped->data, mapped->data_len};
   file->num_files = manifest_header.num_files;
   file->manifest = entries;
   return bg3_success;
 }
 
+bg3_status bg3_lspk_file_attach_part(bg3_lspk_file* file,
+                                     size_t part_num,
+                                     char* data,
+                                     size_t data_len) {
+  if (part_num >= file->header.num_parts) {
+    return bg3_error_overflow;
+  }
+  if (part_num == 0) {
+    return bg3_error_failed;
+  }
+  file->parts[part_num] = (bg3_lspk_part){data, data_len};
+  return bg3_success;
+}
+
 void bg3_lspk_file_destroy(bg3_lspk_file* file) {
   free(file->manifest);
+  free(file->parts);
 }
 
 bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
@@ -2683,6 +2713,13 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
                                  size_t* dest_len) {
   size_t avail_len = *dest_len;
   size_t entry_offset = ((size_t)entry->offset_hi << 32) | entry->offset_lo;
+  if (entry->part_num >= file->header.num_parts) {
+    return bg3_error_overflow;
+  }
+  if (!file->parts[entry->part_num].data) {
+    return bg3_error_failed;
+  }
+  char* entry_data = file->parts[entry->part_num].data + entry_offset;
   // TODO: bounds checking
   switch (LIBBG3_LSPK_ENTRY_COMPRESSION_METHOD(entry->compression)) {
     case LIBBG3_LSPK_ENTRY_COMPRESSION_ZLIB: {
@@ -2691,8 +2728,7 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
       if (avail_len < need_len) {
         return bg3_error_overflow;
       }
-      if (mz_uncompress2((unsigned char*)dest, &need_len,
-                         (unsigned char*)(file->mapped->data + entry_offset),
+      if (mz_uncompress2((unsigned char*)dest, &need_len, (unsigned char*)entry_data,
                          &src_len) != 0) {
         return bg3_error_failed;
       }
@@ -2703,8 +2739,8 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
       if (avail_len < entry->uncompressed_size) {
         return bg3_error_overflow;
       }
-      if (LZ4_decompress_safe(file->mapped->data + entry_offset, dest,
-                              entry->compressed_size, entry->uncompressed_size) < 0) {
+      if (LZ4_decompress_safe(entry_data, dest, entry->compressed_size,
+                              entry->uncompressed_size) < 0) {
         return bg3_error_failed;
       }
       break;
@@ -2713,7 +2749,7 @@ bg3_status bg3_lspk_file_extract(bg3_lspk_file* file,
       if (avail_len < entry->compressed_size) {
         return bg3_error_overflow;
       }
-      memcpy(dest, file->mapped->data + entry_offset, entry->compressed_size);
+      memcpy(dest, entry_data, entry->compressed_size);
       break;
   }
   return bg3_success;
