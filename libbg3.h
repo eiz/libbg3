@@ -59,7 +59,8 @@ extern "C" {
 #endif
 
 // utilities
-#define LIBBG3_API __attribute__((visibility("default")))
+#define LIBBG3_API  __attribute__((visibility("default")))
+#define LIBBG3_PACK __attribute__((__packed__))
 
 #define LIBBG3_IS_SET(field, flag) (((field) & (flag)) != 0)
 #define LIBBG3_COUNT_OF(array)     ((sizeof(array)) / sizeof(*(array)))
@@ -787,11 +788,6 @@ typedef enum bg3_granny_compression_type {
 #define LIBBG3_GRANNY_MAGIC_LO      0x141F636F5E499BE5
 #define LIBBG3_GRANNY_VERSION       7
 #define LIBBG3_GRANNY_BITKNIT_CHUNK 0x2000
-// Granny pervasively uses packed alignment structs on disk, and their pointer
-// fixup system really wants to in-place update 4-byte aligned 8-byte pointers
-// in the 64-bit variant. So, contrary to all other formats supported in this
-// program, we actually use packed alignment for them.
-#define LIBBG3_GRANNY_PACK          __attribute__((__packed__))
 
 // Begin Granny3D on-disk structures
 
@@ -821,17 +817,17 @@ typedef enum bg3_granny_data_type {
   bg3_granny_dt_count = bg3_granny_dt_empty_reference + 1,
 } bg3_granny_data_type;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_section_ptr {
+typedef struct LIBBG3_PACK bg3_granny_section_ptr {
   uint32_t section;
   uint32_t offset;
-} LIBBG3_GRANNY_PACK bg3_granny_section_ptr;
+} LIBBG3_PACK bg3_granny_section_ptr;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_fixup {
+typedef struct LIBBG3_PACK bg3_granny_fixup {
   uint32_t section_offset;
   bg3_granny_section_ptr ptr;
-} LIBBG3_GRANNY_PACK bg3_granny_fixup;
+} LIBBG3_PACK bg3_granny_fixup;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_magic {
+typedef struct LIBBG3_PACK bg3_granny_magic {
   uint64_t lo;
   uint64_t hi;
   uint32_t header_size;
@@ -839,7 +835,7 @@ typedef struct LIBBG3_GRANNY_PACK bg3_granny_magic {
   uint32_t reserved[2];
 } bg3_granny_magic;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_header {
+typedef struct LIBBG3_PACK bg3_granny_header {
   uint32_t format_version;
   uint32_t file_size;
   uint32_t crc32;
@@ -853,7 +849,7 @@ typedef struct LIBBG3_GRANNY_PACK bg3_granny_header {
   uint32_t reserved[3];
 } bg3_granny_header;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_section_header {
+typedef struct LIBBG3_PACK bg3_granny_section_header {
   uint32_t compression;
   uint32_t offset;
   uint32_t compressed_len;
@@ -868,7 +864,7 @@ typedef struct LIBBG3_GRANNY_PACK bg3_granny_section_header {
   uint32_t num_mixed_marshals;
 } bg3_granny_section_header;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_type_info {
+typedef struct LIBBG3_PACK bg3_granny_type_info {
   bg3_granny_data_type type;
   char* name;
   struct bg3_granny_type_info* reference_type;
@@ -877,18 +873,18 @@ typedef struct LIBBG3_GRANNY_PACK bg3_granny_type_info {
   uint64_t reserved;
 } bg3_granny_type_info;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_variant {
+typedef struct LIBBG3_PACK bg3_granny_variant {
   bg3_granny_type_info* type;
   void* obj;
 } bg3_granny_variant;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_variant_array {
+typedef struct LIBBG3_PACK bg3_granny_variant_array {
   bg3_granny_type_info* type;
   int32_t num_items;
   void* items;
 } bg3_granny_variant_array;
 
-typedef struct LIBBG3_GRANNY_PACK bg3_granny_transform {
+typedef struct LIBBG3_PACK bg3_granny_transform {
   uint32_t flags;
   bg3_vec3 position;
   bg3_vec4 orientation;
@@ -950,17 +946,30 @@ bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 
 // granite tile set
 
-#define LIBBG3_GTS_MAGIC   0x47505247  // 'GRPG' in little endian
-#define LIBBG3_GTS_VERSION 5
+#define LIBBG3_GTS_MAGIC               0x47505247  // 'GRPG' in little endian
+#define LIBBG3_GTS_VERSION             5
+#define LIBBG3_MAKE_FOURCC(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
+#define LIBBG3_FOURCC_FMT              "%c%c%c%c"
+#define LIBBG3_FOURCC_FMT_ARGS(fourcc)                     \
+  (char)((fourcc) & 0xFF), (char)(((fourcc) >> 8) & 0xFF), \
+      (char)(((fourcc) >> 16) & 0xFF), (char)(((fourcc) >> 24) & 0xFF)
 
-typedef struct bg3_gts_header {
-  uint32_t magic;
-  uint32_t version;
-  uint32_t unk0[9];
-  uint32_t unk_offset;
-  // ...
-  // suspect header len is 0xC0?
-} bg3_gts_header;
+typedef struct LIBBG3_PACK bg3_gts_header {
+  uint32_t magic;            // 0x0
+  uint32_t version;          // 0x4
+  uint32_t unk0[5];          // 0x8
+  uint32_t num_layers;       // 0x1C
+  uint32_t unk0a[2];         // 0x20
+  uint32_t num_levels;       // 0x28
+  uint64_t unk_offset;       // 0x2C
+  uint32_t height_or_width;  // 0x34
+  uint32_t width_or_height;  // 0x38
+  uint32_t unk1[21];         // 0x34
+  uint32_t gdex_len;         // 0x90
+  uint64_t gdex_offset;      // 0x94
+  uint32_t unk2[9];          // 0x9C
+  // header len is 0xC0
+} LIBBG3_PACK bg3_gts_header;
 
 typedef struct bg3_gts_reader {
   bg3_gts_header header;
@@ -3950,7 +3959,13 @@ void bg3_gts_reader_destroy(bg3_gts_reader* reader) {
 
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
-  printf("unk offset %08X\n", reader->header.unk_offset);
+  printf("unk offset %08llX\n", reader->header.unk_offset);
+  printf("layers %d\n", reader->header.num_layers);
+  printf("mip levels %d\n", reader->header.num_levels);
+  printf("tile width %d tile height %d\n", reader->header.width_or_height,
+         reader->header.height_or_width);
+  printf("gdex offset (offset %zd) %016llX\n", offsetof(bg3_gts_header, gdex_offset),
+         reader->header.gdex_offset);
 }
 
 void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src) {
