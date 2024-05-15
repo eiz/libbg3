@@ -992,11 +992,43 @@ typedef enum bg3_gdex_tag : uint32_t {
   bg3_gdex_tag_proj = LIBBG3_MAKE_FOURCC('P', 'R', 'O', 'J'),
   bg3_gdex_tag_linf = LIBBG3_MAKE_FOURCC('L', 'I', 'N', 'F'),
   bg3_gdex_tag_info = LIBBG3_MAKE_FOURCC('I', 'N', 'F', 'O'),
+  bg3_gdex_tag_txts = LIBBG3_MAKE_FOURCC('T', 'X', 'T', 'S'),
+  bg3_gdex_tag_txtr = LIBBG3_MAKE_FOURCC('T', 'X', 'T', 'R'),
+  bg3_gdex_tag_name = LIBBG3_MAKE_FOURCC('N', 'A', 'M', 'E'),
+  bg3_gdex_tag_wdth = LIBBG3_MAKE_FOURCC('W', 'D', 'T', 'H'),
+  bg3_gdex_tag_hght = LIBBG3_MAKE_FOURCC('H', 'G', 'H', 'T'),
+  bg3_gdex_tag_xxxx = LIBBG3_MAKE_FOURCC('X', 'X', 'X', 'X'),
+  bg3_gdex_tag_yyyy = LIBBG3_MAKE_FOURCC('Y', 'Y', 'Y', 'Y'),
+  bg3_gdex_tag_addr = LIBBG3_MAKE_FOURCC('A', 'D', 'D', 'R'),
+  bg3_gdex_tag_srgb = LIBBG3_MAKE_FOURCC('S', 'R', 'G', 'B'),
+  bg3_gdex_tag_thmb = LIBBG3_MAKE_FOURCC('T', 'H', 'M', 'B'),
+  bg3_gdex_tag_layr = LIBBG3_MAKE_FOURCC('L', 'A', 'Y', 'R'),
+  bg3_gdex_tag_indx = LIBBG3_MAKE_FOURCC('I', 'N', 'D', 'X'),
+  bg3_gdex_tag_type = LIBBG3_MAKE_FOURCC('T', 'Y', 'P', 'E'),
+  bg3_gdex_tag_comp = LIBBG3_MAKE_FOURCC('C', 'O', 'M', 'P'),
+  bg3_gdex_tag_cmpw = LIBBG3_MAKE_FOURCC('C', 'M', 'P', 'W'),
+  bg3_gdex_tag_majr = LIBBG3_MAKE_FOURCC('M', 'A', 'J', 'R'),
+  bg3_gdex_tag_minr = LIBBG3_MAKE_FOURCC('M', 'I', 'N', 'R'),
+  bg3_gdex_tag_binf = LIBBG3_MAKE_FOURCC('B', 'I', 'N', 'F'),
+  bg3_gdex_tag_date = LIBBG3_MAKE_FOURCC('D', 'A', 'T', 'E'),
+  bg3_gdex_tag_blks = LIBBG3_MAKE_FOURCC('B', 'L', 'K', 'S'),
+  bg3_gdex_tag_tile = LIBBG3_MAKE_FOURCC('T', 'I', 'L', 'E'),
+  bg3_gdex_tag_bdpr = LIBBG3_MAKE_FOURCC('B', 'D', 'P', 'R'),
+  bg3_gdex_tag_ltmp = LIBBG3_MAKE_FOURCC('L', 'T', 'M', 'P'),
 } bg3_gdex_tag;
 
 typedef enum bg3_gdex_item_type : uint8_t {
+  bg3_gdex_item_bytes = 0,
   bg3_gdex_item_container = 1,
   bg3_gdex_item_string = 2,
+  bg3_gdex_item_int = 3,
+  bg3_gdex_item_float = 3,  // ya rly
+  bg3_gdex_item_int64 = 4,
+  bg3_gdex_item_double = 6,
+  bg3_gdex_item_date = 7,         // actually just a uint64_t
+  bg3_gdex_item_typed_array = 8,  // they don't write any metadata for these
+  bg3_gdex_item_uuid = 12,
+  bg3_gdex_item_uuid_array = 13,
 } bg3_gdex_item_type;
 
 // looks similar to an mpeg-4 box? but more cringe
