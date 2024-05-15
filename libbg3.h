@@ -956,23 +956,38 @@ bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
       (char)(((fourcc) >> 16) & 0xFF), (char)(((fourcc) >> 24) & 0xFF)
 
 typedef struct LIBBG3_PACK bg3_gts_header {
-  uint32_t magic;            // 0x0
-  uint32_t version;          // 0x4
-  uint32_t unk0[5];          // 0x8
-  uint32_t num_layers;       // 0x1C
-  uint32_t unk0a[2];         // 0x20
-  uint32_t num_levels;       // 0x28
-  uint64_t unk_offset;       // 0x2C
-  uint32_t height_or_width;  // 0x34
-  uint32_t width_or_height;  // 0x38
-  uint32_t unk1[21];         // 0x3C
-  uint32_t gdex_len;         // 0x90
-  uint64_t gdex_offset;      // 0x94
-  uint32_t unk2[3];          // 0x9C
-  uint64_t unk_offset2;      // 0xA8
-  uint32_t unk2a[4];         // 0xB0
+  uint32_t magic;                    // 0x0
+  uint32_t version;                  // 0x4
+  uint32_t unk0_a;                   // 0x8
+  uint64_t unk0_b;                   // 0xC
+  uint64_t unk0_c;                   // 0x14
+  uint32_t num_layers;               // 0x1C
+  uint64_t layers_offset;            // 0x20
+  uint32_t num_levels;               // 0x28
+  uint64_t levels_offset;            // 0x2C
+  uint32_t width;                    // 0x34, guessed order
+  uint32_t height;                   // 0x38
+  uint32_t unk1[21];                 // 0x3C
+  uint32_t gdex_len;                 // 0x90
+  uint64_t gdex_offset;              // 0x94
+  uint32_t num_parameter_blocks;     // 0x9C
+  uint64_t parameter_blocks_offset;  // 0xA0
+  uint64_t unk_offset2;              // 0xA8
+  uint32_t unk2a[4];                 // 0xB0
   // header len is 0xC0
 } LIBBG3_PACK bg3_gts_header;
+
+typedef struct bg3_gts_level_header {
+  uint32_t x;
+  uint32_t y;
+  uint64_t offset;
+} bg3_gts_level_header;
+
+typedef struct bg3_gts_parameter_block_header {
+  uint32_t unk0[2];
+  uint32_t data_len;
+  uint64_t data_offset;
+} LIBBG3_PACK bg3_gts_parameter_block_header;
 
 typedef struct bg3_gts_reader {
   char* data;
@@ -1015,6 +1030,7 @@ typedef enum bg3_gdex_tag : uint32_t {
   bg3_gdex_tag_tile = LIBBG3_MAKE_FOURCC('T', 'I', 'L', 'E'),
   bg3_gdex_tag_bdpr = LIBBG3_MAKE_FOURCC('B', 'D', 'P', 'R'),
   bg3_gdex_tag_ltmp = LIBBG3_MAKE_FOURCC('L', 'T', 'M', 'P'),
+  bg3_gdex_tag_nvld = LIBBG3_MAKE_FOURCC('N', 'V', 'L', 'D'),
 } bg3_gdex_tag;
 
 typedef enum bg3_gdex_item_type : uint8_t {
@@ -4055,16 +4071,17 @@ static void bg3__gdex_dump(bg3_indent_buffer* ibuf,
     items += bg3_gdex_item_length(&item);
   }
 }
+
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
   printf("offsetof(bg3_gdex_item, length_hi) == %zu\n",
          offsetof(bg3_gdex_item, length_hi));
-  printf("unk offset %08llX\n", reader->header.unk_offset);
+  printf("unk offset %08llX\n", reader->header.levels_offset);
   printf("unk offset 2 %08llX\n", reader->header.unk_offset2);
   printf("layers %d\n", reader->header.num_layers);
   printf("mip levels %d\n", reader->header.num_levels);
-  printf("tile width %d tile height %d\n", reader->header.width_or_height,
-         reader->header.height_or_width);
+  printf("tile width %d tile height %d\n", reader->header.height, reader->header.width);
+  printf("num param blocks %d\n", reader->header.num_parameter_blocks);
   printf("gdex offset (offset %zd) %016llX len %08X\n",
          offsetof(bg3_gts_header, gdex_offset), reader->header.gdex_offset,
          reader->header.gdex_len);
@@ -4074,14 +4091,25 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   LIBBG3_CHECK(reader->header.gdex_offset + reader->header.gdex_len <= reader->data_len,
                "gdex data out of bounds");
   char* gdex = reader->data + reader->header.gdex_offset;
-  uint32_t box_id;
-  memcpy(&box_id, gdex, 4);
-  printf("gdex " LIBBG3_FOURCC_FMT "\n", LIBBG3_FOURCC_FMT_ARGS(box_id));
-  bg3_hex_dump(gdex, 12);
   bg3_indent_buffer ibuf;
   bg3_ibuf_init(&ibuf);
   bg3__gdex_dump(&ibuf, reader->data, gdex, gdex + reader->header.gdex_len);
   printf("%s\n", ibuf.output.data);
+  for (size_t i = 0, offset = reader->header.levels_offset; i < reader->header.num_levels;
+       ++i, offset += sizeof(bg3_gts_level_header)) {
+    bg3_gts_level_header header;
+    memcpy(&header, reader->data + offset, sizeof(bg3_gts_level_header));
+    printf("level %zd: %d %d %016llX\n", i, header.x, header.y, header.offset);
+  }
+  for (size_t i = 0, offset = reader->header.parameter_blocks_offset;
+       i < reader->header.num_parameter_blocks;
+       ++i, offset += sizeof(bg3_gts_parameter_block_header)) {
+    bg3_gts_parameter_block_header header;
+    memcpy(&header, reader->data + offset, sizeof(bg3_gts_parameter_block_header));
+    printf("param block %zd: %08X %08X %d %016llX\n", i, header.unk0[0], header.unk0[1],
+           header.data_len, header.data_offset);
+  }
+  bg3_ibuf_destroy(&ibuf);
 }
 
 void bg3_sexp_token_copy(bg3_sexp_token* dest, bg3_sexp_token* src) {
