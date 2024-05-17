@@ -63,10 +63,20 @@ extern "C" {
 #define LIBBG3_PACK __attribute__((__packed__))
 
 #define LIBBG3_IS_SET(field, flag) (((field) & (flag)) != 0)
-#define LIBBG3_COUNT_OF(array)     ((sizeof(array)) / sizeof(*(array)))
-#define LIBBG3_MAX(x, y)           (((x) > (y)) ? (x) : (y))
-#define LIBBG3_MIN(x, y)           (((x) < (y)) ? (x) : (y))
-#define LIBBG3_ROUND_UP(x, y)      ((((x) + (y)-1) / (y)) * (y))
+
+#define LIBBG3_COUNT_OF(array) ((sizeof(array)) / sizeof(*(array)))
+
+#define LIBBG3_MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define LIBBG3_MIN(x, y) (((x) < (y)) ? (x) : (y))
+
+#define LIBBG3_ROUND_UP(x, y) ((((x) + (y)-1) / (y)) * (y))
+
+#define LIBBG3_MAKE_FOURCC(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
+
+#define LIBBG3_FOURCC_FMT "%c%c%c%c"
+#define LIBBG3_FOURCC_FMT_ARGS(fourcc)                     \
+  (char)((fourcc) & 0xFF), (char)(((fourcc) >> 8) & 0xFF), \
+      (char)(((fourcc) >> 16) & 0xFF), (char)(((fourcc) >> 24) & 0xFF)
 
 typedef _Float16 bg3_half;
 typedef float bg3_vec3[3];
@@ -947,13 +957,8 @@ bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 
 // granite tile set
 
-#define LIBBG3_GTS_MAGIC               0x47505247  // 'GRPG' in little endian
-#define LIBBG3_GTS_VERSION             5
-#define LIBBG3_MAKE_FOURCC(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
-#define LIBBG3_FOURCC_FMT              "%c%c%c%c"
-#define LIBBG3_FOURCC_FMT_ARGS(fourcc)                     \
-  (char)((fourcc) & 0xFF), (char)(((fourcc) >> 8) & 0xFF), \
-      (char)(((fourcc) >> 16) & 0xFF), (char)(((fourcc) >> 24) & 0xFF)
+#define LIBBG3_GTS_MAGIC   0x47505247  // 'GRPG' in little endian
+#define LIBBG3_GTS_VERSION 5
 
 typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t magic;                    // 0x0
@@ -972,16 +977,21 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint64_t gdex_offset;              // 0x94
   uint32_t num_parameter_blocks;     // 0x9C
   uint64_t parameter_blocks_offset;  // 0xA0
-  uint64_t unk_offset2;              // 0xA8
-  uint32_t unk2a[4];                 // 0xB0
+  // pointer to 0xC byte header, first field is # of 0x24 byte entries
+  uint64_t unk_offset2;  // 0xA8
+  uint32_t unk2a[4];     // 0xB0
   // header len is 0xC0
 } LIBBG3_PACK bg3_gts_header;
+
+typedef struct bg3_gts_layer_header {
+  uint64_t unk0;
+} LIBBG3_PACK bg3_gts_layer_header;
 
 typedef struct bg3_gts_level_header {
   uint32_t x;
   uint32_t y;
   uint64_t offset;
-} bg3_gts_level_header;
+} LIBBG3_PACK bg3_gts_level_header;
 
 typedef struct bg3_gts_parameter_block_header {
   uint32_t unk0[2];
@@ -1053,16 +1063,53 @@ typedef struct bg3_gdex_item {
   bg3_gdex_item_type type;
   uint8_t flag;
   uint16_t length_lo;
-  uint32_t length_hi;
 } LIBBG3_PACK bg3_gdex_item;
 
-static inline uint64_t bg3_gdex_item_length(bg3_gdex_item* item) {
+static inline size_t bg3_gdex_item_header_length(bg3_gdex_item const* item) {
+  return sizeof(bg3_gdex_item) + (item->flag & 1 ? 4 : 0);
+}
+
+static inline char const* bg3_gdex_item_payload(bg3_gdex_item const* item) {
+  return (char*)item + bg3_gdex_item_header_length(item);
+}
+
+static inline uint32_t bg3_gdex_item_extended_length(bg3_gdex_item const* item) {
+  return *(uint32_t const*)(item + 1);
+}
+
+static inline size_t bg3_gdex_item_payload_length(bg3_gdex_item const* item) {
+  return (item->flag & 1) ? ((uint64_t)item->length_lo |
+                             ((uint64_t)bg3_gdex_item_extended_length(item) << 16ULL))
+                          : (uint64_t)item->length_lo;
+}
+
+static inline uint64_t bg3_gdex_item_length(bg3_gdex_item const* item) {
   return LIBBG3_ROUND_UP(
-      offsetof(bg3_gdex_item, length_hi) +
-          ((item->flag & 1)
-               ? 4 + ((uint64_t)item->length_lo | ((uint64_t)item->length_hi << 16ULL))
-               : (uint64_t)item->length_lo),
-      4);
+      bg3_gdex_item_header_length(item) + bg3_gdex_item_payload_length(item), 4);
+}
+
+bg3_gdex_item const* bg3_gdex_item_find_child(bg3_gdex_item const* parent, uint32_t tag);
+
+typedef struct bg3_gdex_iter {
+  bg3_cursor c;
+} bg3_gdex_iter;
+
+static inline void bg3_gdex_iter_init(bg3_gdex_iter* iter, bg3_gdex_item const* item) {
+  if (item->type != bg3_gdex_item_container) {
+    iter->c.ptr = iter->c.start = iter->c.end = 0;
+    return;
+  }
+  bg3_cursor_init(&iter->c, (char*)item + bg3_gdex_item_header_length(item),
+                  bg3_gdex_item_payload_length(item));
+}
+
+static inline bg3_gdex_item* bg3_gdex_iter_next(bg3_gdex_iter* iter) {
+  if (iter->c.ptr == iter->c.end) {
+    return 0;
+  }
+  bg3_gdex_item* item = (bg3_gdex_item*)iter->c.ptr;
+  iter->c.ptr += bg3_gdex_item_length(item);
+  return item;
 }
 
 // sexp lexer
@@ -4052,32 +4099,48 @@ void bg3_gts_reader_destroy(bg3_gts_reader* reader) {
 }
 
 static void bg3__gdex_dump(bg3_indent_buffer* ibuf,
-                           char* base,
-                           char* items,
-                           char* items_end) {
+                           char const* base,
+                           char const* items,
+                           char const* items_end) {
   while (items < items_end) {
-    bg3_gdex_item item;
-    memcpy(&item, items, sizeof(bg3_gdex_item));
+    bg3_gdex_item const* item = (bg3_gdex_item const*)items;
     bg3_ibuf_printf(ibuf, "[" LIBBG3_FOURCC_FMT "]: %08zX %d %d %08X 0x%08X len: %lld\n",
-                    LIBBG3_FOURCC_FMT_ARGS(item.tag), items - base, (int)item.type,
-                    (int)item.flag, (int)item.length_lo,
-                    item.flag & 1 ? item.length_hi : 0, bg3_gdex_item_length(&item));
+                    LIBBG3_FOURCC_FMT_ARGS(item->tag), items - base, (int)item->type,
+                    (int)item->flag, (int)item->length_lo,
+                    item->flag & 1 ? bg3_gdex_item_extended_length(item) : 0,
+                    bg3_gdex_item_length(item));
     bg3_ibuf_push(ibuf, 4);
-    if (item.type == bg3_gdex_item_container) {
-      bg3__gdex_dump(ibuf, base, items + sizeof(bg3_gdex_item),
-                     items + bg3_gdex_item_length(&item));
+    if (item->type == bg3_gdex_item_container) {
+      bg3__gdex_dump(ibuf, base, items + bg3_gdex_item_header_length(item),
+                     items + bg3_gdex_item_length(item));
     }
     bg3_ibuf_pop(ibuf);
-    items += bg3_gdex_item_length(&item);
+    items += bg3_gdex_item_length(item);
   }
+}
+
+bg3_gdex_item const* bg3_gdex_item_find_child(bg3_gdex_item const* parent, uint32_t tag) {
+  bg3_gdex_iter iter;
+  bg3_gdex_iter_init(&iter, parent);
+  bg3_gdex_item* child;
+  while ((child = bg3_gdex_iter_next(&iter))) {
+    if (child->tag == tag) {
+      return child;
+    }
+  }
+  return 0;
 }
 
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
-  printf("offsetof(bg3_gdex_item, length_hi) == %zu\n",
-         offsetof(bg3_gdex_item, length_hi));
   printf("unk offset %08llX\n", reader->header.levels_offset);
   printf("unk offset 2 %08llX\n", reader->header.unk_offset2);
+  if (reader->header.unk_offset2) {
+    uint32_t len;
+    memcpy(&len, reader->data + reader->header.unk_offset2, sizeof(uint32_t));
+    printf("unk2 table # elements: %d\n", len);
+    bg3_hex_dump(reader->data + reader->header.unk_offset2 + 0xC, len * 0x24);
+  }
   printf("layers %d\n", reader->header.num_layers);
   printf("mip levels %d\n", reader->header.num_levels);
   printf("tile width %d tile height %d\n", reader->header.height, reader->header.width);
@@ -4091,6 +4154,19 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   LIBBG3_CHECK(reader->header.gdex_offset + reader->header.gdex_len <= reader->data_len,
                "gdex data out of bounds");
   char* gdex = reader->data + reader->header.gdex_offset;
+  bg3_gdex_item* gdex_root = (bg3_gdex_item*)gdex;
+  bg3_gdex_item const* item = bg3_gdex_item_find_child(gdex_root, bg3_gdex_tag_atls);
+  item = bg3_gdex_item_find_child(item, bg3_gdex_tag_txts);
+  bg3_gdex_iter iter;
+  bg3_gdex_iter_init(&iter, item);
+  bg3_gdex_item* tex_item;
+  int num_textures = 0;
+  while ((tex_item = bg3_gdex_iter_next(&iter))) {
+    if (tex_item->tag == bg3_gdex_tag_txtr) {
+      num_textures++;
+    }
+  }
+  printf("num_textures: %d\n", num_textures);
   bg3_indent_buffer ibuf;
   bg3_ibuf_init(&ibuf);
   bg3__gdex_dump(&ibuf, reader->data, gdex, gdex + reader->header.gdex_len);
