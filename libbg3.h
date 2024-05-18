@@ -1005,6 +1005,14 @@ typedef struct bg3_gts_reader {
   bg3_gts_header header;
 } bg3_gts_reader;
 
+typedef struct bg3_gts_unk_table2_entry {
+  bg3_uuid uuid;
+  uint64_t unk0;  // probably an offset?
+  uint32_t unk1;  // ya probably a length
+  uint32_t unk2;  // also length? unk0 + unk1 + unk2 seems to == the next entry's unk0
+  uint32_t unk3;  // possibly 2 uint16_ts? tile dims?
+} LIBBG3_PACK bg3_gts_unk_table2_entry;
+
 bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
                                           char* data,
                                           size_t data_len);
@@ -4136,10 +4144,18 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("unk offset %08llX\n", reader->header.levels_offset);
   printf("unk offset 2 %08llX\n", reader->header.unk_offset2);
   if (reader->header.unk_offset2) {
+    bg3_gts_unk_table2_entry* unk2 =
+        (bg3_gts_unk_table2_entry*)(reader->data + reader->header.unk_offset2 + 0xC);
     uint32_t len;
     memcpy(&len, reader->data + reader->header.unk_offset2, sizeof(uint32_t));
-    printf("unk2 table # elements: %d\n", len);
-    bg3_hex_dump(reader->data + reader->header.unk_offset2 + 0xC, len * 0x24);
+    printf("unk2 table # elements: %d (sizeof %zu)\n", len,
+           sizeof(bg3_gts_unk_table2_entry));
+    for (uint32_t i = 0; i < len; ++i) {
+      char tmpbuf[48];
+      bg3_uuid_to_string(&unk2[i].uuid, tmpbuf);
+      printf("%s: %016llX %08X %08X %08X\n", tmpbuf, unk2[i].unk0, unk2[i].unk1,
+             unk2[i].unk2, unk2[i].unk3);
+    }
   }
   printf("layers %d\n", reader->header.num_layers);
   printf("mip levels %d\n", reader->header.num_levels);
