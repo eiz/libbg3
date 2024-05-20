@@ -978,8 +978,8 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t num_parameter_blocks;     // 0x9C
   uint64_t parameter_blocks_offset;  // 0xA0
   // pointer to 0xC byte header, first field is # of 0x24 byte entries
-  uint64_t unk_offset2;  // 0xA8
-  uint32_t unk2a[4];     // 0xB0
+  uint64_t thumbnails_offset;  // 0xA8
+  uint32_t unk2a[4];           // 0xB0
   // header len is 0xC0
 } LIBBG3_PACK bg3_gts_header;
 
@@ -1005,13 +1005,15 @@ typedef struct bg3_gts_reader {
   bg3_gts_header header;
 } bg3_gts_reader;
 
-typedef struct bg3_gts_unk_table2_entry {
+typedef struct bg3_gts_thumbnails_entry {
   bg3_uuid uuid;
-  uint64_t unk0;  // probably an offset?
-  uint32_t unk1;  // ya probably a length
-  uint32_t unk2;  // also length? unk0 + unk1 + unk2 seems to == the next entry's unk0
-  uint32_t unk3;  // possibly 2 uint16_ts? tile dims?
-} LIBBG3_PACK bg3_gts_unk_table2_entry;
+  uint64_t offset;  // offset for both of the following, which are contiguous
+  // compressed? not sure if fastlz or lz4 or ? looks very simple
+  uint32_t thumbnail_length;
+  uint32_t miptail_length;  // idk format of this data yet
+  uint16_t width;
+  uint16_t height;
+} LIBBG3_PACK bg3_gts_thumbnails_entry;
 
 bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
                                           char* data,
@@ -4142,19 +4144,21 @@ bg3_gdex_item const* bg3_gdex_item_find_child(bg3_gdex_item const* parent, uint3
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
   printf("unk offset %08llX\n", reader->header.levels_offset);
-  printf("unk offset 2 %08llX\n", reader->header.unk_offset2);
-  if (reader->header.unk_offset2) {
-    bg3_gts_unk_table2_entry* unk2 =
-        (bg3_gts_unk_table2_entry*)(reader->data + reader->header.unk_offset2 + 0xC);
+  printf("unk offset 2 %08llX\n", reader->header.thumbnails_offset);
+  if (reader->header.thumbnails_offset) {
+    bg3_gts_thumbnails_entry* thumb =
+        (bg3_gts_thumbnails_entry*)(reader->data + reader->header.thumbnails_offset +
+                                    0xC);
     uint32_t len;
-    memcpy(&len, reader->data + reader->header.unk_offset2, sizeof(uint32_t));
-    printf("unk2 table # elements: %d (sizeof %zu)\n", len,
-           sizeof(bg3_gts_unk_table2_entry));
+    memcpy(&len, reader->data + reader->header.thumbnails_offset, sizeof(uint32_t));
+    printf("thumbnail table # elements: %d (sizeof %zu)\n", len,
+           sizeof(bg3_gts_thumbnails_entry));
     for (uint32_t i = 0; i < len; ++i) {
       char tmpbuf[48];
-      bg3_uuid_to_string(&unk2[i].uuid, tmpbuf);
-      printf("%s: %016llX %08X %08X %08X\n", tmpbuf, unk2[i].unk0, unk2[i].unk1,
-             unk2[i].unk2, unk2[i].unk3);
+      bg3_uuid_to_string(&thumb[i].uuid, tmpbuf);
+      printf("%s: %016llX %08X %08X (%d, %d)\n", tmpbuf, thumb[i].offset,
+             thumb[i].thumbnail_length, thumb[i].miptail_length, thumb[i].width,
+             thumb[i].height);
     }
   }
   printf("layers %d\n", reader->header.num_layers);
