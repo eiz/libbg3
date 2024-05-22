@@ -972,7 +972,9 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint64_t levels_offset;            // 0x2C
   uint32_t width;                    // 0x34, guessed order
   uint32_t height;                   // 0x38
-  uint32_t unk1[21];                 // 0x3C
+  uint32_t unk1[18];                 // 0x3C
+  uint32_t num_page_files;           // 0x84
+  uint64_t page_files_offset;        // 0x88
   uint32_t gdex_len;                 // 0x90
   uint64_t gdex_offset;              // 0x94
   uint32_t num_parameter_blocks;     // 0x9C
@@ -1014,6 +1016,11 @@ typedef struct bg3_gts_thumbnails_entry {
   uint16_t width;
   uint16_t height;
 } LIBBG3_PACK bg3_gts_thumbnails_entry;
+
+typedef struct bg3_gts_page_files_entry {
+  uint16_t name[0x100];  // ?
+  uint32_t unk0[6];
+} LIBBG3_PACK bg3_gts_page_files_entry;
 
 bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
                                           char* data,
@@ -4141,6 +4148,27 @@ bg3_gdex_item const* bg3_gdex_item_find_child(bg3_gdex_item const* parent, uint3
   return 0;
 }
 
+static size_t bg3__ucs16_strlen(uint16_t* u16str) {
+  size_t len = 0;
+  while (*u16str++) {
+    len++;
+  }
+  return len;
+}
+
+static void bg3__buffer_push_ucs16_as_ascii(bg3_buffer* buf, uint16_t* u16str) {
+  size_t len = bg3__ucs16_strlen(u16str) + 1;
+  for (size_t i = 0; i < len; ++i) {
+    uint16_t c = u16str[i];
+    if (c < 0x80) {
+      bg3_buffer_push(buf, &c, 1);
+    } else {
+      bg3_panic("non-ascii character in string");
+    }
+  }
+  buf->size--;
+}
+
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
   if (reader->header.thumbnails_offset) {
@@ -4217,6 +4245,20 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
     printf("param block %zd: %08X %08X %d %016llX\n", i, header.unk0[0], header.unk0[1],
            header.data_len, header.data_offset);
   }
+  printf("num page files: %d\n", reader->header.num_page_files);
+  bg3_buffer tmpbuf = {};
+  for (size_t i = 0, offset = reader->header.page_files_offset;
+       i < reader->header.num_page_files;
+       ++i, offset += sizeof(bg3_gts_page_files_entry)) {
+    tmpbuf.size = 0;
+    bg3_gts_page_files_entry entry;
+    memcpy(&entry, reader->data + offset, sizeof(bg3_gts_page_files_entry));
+    bg3__buffer_push_ucs16_as_ascii(&tmpbuf, entry.name);
+    printf("page file %zd: %s %08X %08X %08X %08X %08X %08X\n", i, tmpbuf.data,
+           entry.unk0[0], entry.unk0[1], entry.unk0[2], entry.unk0[3], entry.unk0[4],
+           entry.unk0[5]);
+  }
+  bg3_buffer_destroy(&tmpbuf);
   bg3_ibuf_destroy(&ibuf);
 }
 
