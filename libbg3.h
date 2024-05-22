@@ -4143,8 +4143,6 @@ bg3_gdex_item const* bg3_gdex_item_find_child(bg3_gdex_item const* parent, uint3
 
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
-  printf("unk offset %08llX\n", reader->header.levels_offset);
-  printf("unk offset 2 %08llX\n", reader->header.thumbnails_offset);
   if (reader->header.thumbnails_offset) {
     bg3_gts_thumbnails_entry* thumb =
         (bg3_gts_thumbnails_entry*)(reader->data + reader->header.thumbnails_offset +
@@ -4196,6 +4194,20 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
     bg3_gts_level_header header;
     memcpy(&header, reader->data + offset, sizeof(bg3_gts_level_header));
     printf("level %zd: %d %d %016llX\n", i, header.x, header.y, header.offset);
+    uint32_t level_size = header.x * header.y * reader->header.num_layers * 4;
+    uint32_t* level_data = (uint32_t*)(reader->data + header.offset);
+    for (uint32_t y = 0; y < header.y; ++y) {
+      for (uint32_t x = 0; x < header.x; ++x) {
+        printf("[");
+        for (uint32_t layer = 0; layer < reader->header.num_layers; ++layer) {
+          uint32_t stride = header.x * reader->header.num_layers;
+          uint32_t index = y * stride + x * reader->header.num_layers + layer;
+          printf(layer ? " %08X" : "%08X", level_data[index]);
+        }
+        printf("] ");
+      }
+      printf("\n");
+    }
   }
   for (size_t i = 0, offset = reader->header.parameter_blocks_offset;
        i < reader->header.num_parameter_blocks;
