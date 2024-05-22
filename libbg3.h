@@ -963,16 +963,24 @@ bg3_granny_reader_get_root_type(bg3_granny_reader* reader);
 typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t magic;                    // 0x0
   uint32_t version;                  // 0x4
-  uint32_t unk0_a;                   // 0x8
-  uint64_t unk0_b;                   // 0xC
-  uint64_t unk0_c;                   // 0x14
+  uint32_t unk_used_a;               // 0x8
+  uint64_t unk_used_b;               // 0xC
+  uint64_t unk_used_c;               // 0x14
   uint32_t num_layers;               // 0x1C
   uint64_t layers_offset;            // 0x20
   uint32_t num_levels;               // 0x28
   uint64_t levels_offset;            // 0x2C
   uint32_t width;                    // 0x34, guessed order
   uint32_t height;                   // 0x38
-  uint32_t unk1[18];                 // 0x3C
+  uint32_t unk_used_d;               // 0x3C
+  uint32_t unused_0;                 // 0x40
+  uint32_t num_unktab0;              // 0x44
+  uint64_t unktab0_offset;           // 0x48
+  uint32_t unused_1[2];              // 0x50
+  uint32_t num_unktab1;              // 0x58
+  uint64_t unktab1_offset;           // 0x5C
+  uint32_t unused_2[7];              // 0x64
+  uint32_t unk_used_e;               // 0x80
   uint32_t num_page_files;           // 0x84
   uint64_t page_files_offset;        // 0x88
   uint32_t gdex_len;                 // 0x90
@@ -981,7 +989,7 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint64_t parameter_blocks_offset;  // 0xA0
   // pointer to 0xC byte header, first field is # of 0x24 byte entries
   uint64_t thumbnails_offset;  // 0xA8
-  uint32_t unk2a[4];           // 0xB0
+  uint32_t unused_3[4];        // 0xB0
   // header len is 0xC0
 } LIBBG3_PACK bg3_gts_header;
 
@@ -990,8 +998,8 @@ typedef struct bg3_gts_layer_header {
 } LIBBG3_PACK bg3_gts_layer_header;
 
 typedef struct bg3_gts_level_header {
-  uint32_t x;
-  uint32_t y;
+  uint32_t width;
+  uint32_t height;
   uint64_t offset;
 } LIBBG3_PACK bg3_gts_level_header;
 
@@ -1019,7 +1027,9 @@ typedef struct bg3_gts_thumbnails_entry {
 
 typedef struct bg3_gts_page_files_entry {
   uint16_t name[0x100];  // ?
-  uint32_t unk0[6];
+  uint32_t unk0;
+  uint8_t file_hash[16];
+  uint32_t unk1;
 } LIBBG3_PACK bg3_gts_page_files_entry;
 
 bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
@@ -4221,14 +4231,14 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
        ++i, offset += sizeof(bg3_gts_level_header)) {
     bg3_gts_level_header header;
     memcpy(&header, reader->data + offset, sizeof(bg3_gts_level_header));
-    printf("level %zd: %d %d %016llX\n", i, header.x, header.y, header.offset);
-    uint32_t level_size = header.x * header.y * reader->header.num_layers * 4;
+    printf("level %zd: %d %d %016llX\n", i, header.width, header.height, header.offset);
+    uint32_t level_size = header.width * header.height * reader->header.num_layers * 4;
     uint32_t* level_data = (uint32_t*)(reader->data + header.offset);
-    for (uint32_t y = 0; y < header.y; ++y) {
-      for (uint32_t x = 0; x < header.x; ++x) {
+    for (uint32_t y = 0; y < header.height; ++y) {
+      for (uint32_t x = 0; x < header.width; ++x) {
         printf("[");
         for (uint32_t layer = 0; layer < reader->header.num_layers; ++layer) {
-          uint32_t stride = header.x * reader->header.num_layers;
+          uint32_t stride = header.width * reader->header.num_layers;
           uint32_t index = y * stride + x * reader->header.num_layers + layer;
           printf(layer ? " %08X" : "%08X", level_data[index]);
         }
@@ -4254,9 +4264,14 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
     bg3_gts_page_files_entry entry;
     memcpy(&entry, reader->data + offset, sizeof(bg3_gts_page_files_entry));
     bg3__buffer_push_ucs16_as_ascii(&tmpbuf, entry.name);
-    printf("page file %zd: %s %08X %08X %08X %08X %08X %08X\n", i, tmpbuf.data,
-           entry.unk0[0], entry.unk0[1], entry.unk0[2], entry.unk0[3], entry.unk0[4],
-           entry.unk0[5]);
+    printf(
+        "page file %zd: %s %08X %08X "
+        "hash=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+        i, tmpbuf.data, entry.unk0, entry.unk1, entry.file_hash[0], entry.file_hash[1],
+        entry.file_hash[2], entry.file_hash[3], entry.file_hash[4], entry.file_hash[5],
+        entry.file_hash[6], entry.file_hash[7], entry.file_hash[8], entry.file_hash[9],
+        entry.file_hash[10], entry.file_hash[11], entry.file_hash[12],
+        entry.file_hash[13], entry.file_hash[14], entry.file_hash[15]);
   }
   bg3_buffer_destroy(&tmpbuf);
   bg3_ibuf_destroy(&ibuf);
