@@ -1025,18 +1025,6 @@ typedef struct bg3_gts_page_files_entry {
   uint32_t unk1;
 } LIBBG3_PACK bg3_gts_page_files_entry;
 
-typedef struct bg3_gts_reader {
-  char* data;
-  size_t data_len;
-  bg3_gts_header header;
-} bg3_gts_reader;
-
-bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
-                                          char* data,
-                                          size_t data_len);
-void LIBBG3_API bg3_gts_reader_destroy(bg3_gts_reader* reader);
-void LIBBG3_API bg3_gts_reader_dump(bg3_gts_reader* reader);
-
 typedef enum bg3_gdex_tag : uint32_t {
   bg3_gdex_tag_meta = LIBBG3_MAKE_FOURCC('M', 'E', 'T', 'A'),
   bg3_gdex_tag_atls = LIBBG3_MAKE_FOURCC('A', 'T', 'L', 'S'),
@@ -1155,6 +1143,16 @@ typedef enum bg3_gts_texture_format : uint32_t {
   bg3_gts_texture_r32g32b32 = 13,
 } bg3_gts_texture_format;
 
+typedef enum bg3_gts_texture_channel_transform : uint32_t {
+  bg3_gts_texture_channel_transform_uint = 0,
+  bg3_gts_texture_channel_transform_sint = 1,
+  bg3_gts_texture_channel_transform_unorm = 2,
+  bg3_gts_texture_channel_transform_snorm = 3,
+  bg3_gts_texture_channel_transform_sfloat = 4,
+  bg3_gts_texture_channel_transform_ufloat = 5,
+  bg3_gts_texture_channel_transform_srgb = 6,
+} bg3_gts_texture_channel_transform;
+
 typedef enum bg3_gts_layer_data_type : uint32_t {
   bg3_gts_layer_dt_r8g8b8_srgb = 0,
   bg3_gts_layer_dt_r8g8b8a8_srgb = 1,
@@ -1184,6 +1182,34 @@ typedef enum bg3_gts_layer_data_type : uint32_t {
   bg3_gts_layer_dt_r16g16b16_float = 25,
   bg3_gts_layer_dt_r16g16b16a16_float = 26,
 } bg3_gts_layer_data_type;
+
+static inline uint32_t bg3_gts_tile_id_get_x(uint32_t tile_id) {
+  return tile_id & 0x7FF;
+}
+
+static inline uint32_t bg3_gts_tile_id_get_y(uint32_t tile_id) {
+  return (tile_id >> 11) & 0x7FF;
+}
+
+static inline uint32_t bg3_gts_tile_id_get_layer(uint32_t tile_id) {
+  return (tile_id >> 22) & 0xF;
+}
+
+static inline uint32_t bg3_gts_tile_id_get_id(uint32_t tile_id) {
+  return (tile_id >> 26) & 0x3F;
+}
+
+typedef struct bg3_gts_reader {
+  char* data;
+  size_t data_len;
+  bg3_gts_header header;
+} bg3_gts_reader;
+
+bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
+                                          char* data,
+                                          size_t data_len);
+void LIBBG3_API bg3_gts_reader_destroy(bg3_gts_reader* reader);
+void LIBBG3_API bg3_gts_reader_dump(bg3_gts_reader* reader);
 
 // sexp lexer
 
@@ -4320,8 +4346,17 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
         i, tmpbuf.data, entry.unk0, entry.unk1, uuidbuf);
   }
   bg3_uuid_to_string(&reader->header.file_uuid, uuidbuf);
-  printf("unknowns: %08X %s %08X %08X\n", reader->header.unk_used_a, uuidbuf,
-         reader->header.tile_border, reader->header.page_file_size);
+  printf("unknowns: %08X %s %08X %08X tab0=%d,%016llX tab1=%d,%016llX \n",
+         reader->header.unk_used_a, uuidbuf, reader->header.tile_border,
+         reader->header.page_file_size, reader->header.num_unktab0,
+         reader->header.unktab0_offset, reader->header.num_unktab1,
+         reader->header.unktab1_offset);
+  printf("unktab0 dump\n");
+  bg3_hex_dump(reader->data + reader->header.unktab0_offset,
+               reader->header.num_unktab0 * 0xC);
+  printf("unktab1 dump\n");
+  bg3_hex_dump(reader->data + reader->header.unktab1_offset,
+               reader->header.num_unktab1 * 8);
   bg3_buffer_destroy(&tmpbuf);
   bg3_ibuf_destroy(&ibuf);
 }
