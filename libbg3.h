@@ -973,13 +973,13 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t tile_height;              // 0x38
   uint32_t tile_border;              // 0x3C
   uint32_t unused_0;                 // 0x40
-  uint32_t num_unktab0;              // 0x44
-  uint64_t unktab0_offset;           // 0x48
+  uint32_t num_flat_tiles;           // 0x44
+  uint64_t flat_tiles_offset;        // 0x48
   uint32_t unused_1[2];              // 0x50
   uint32_t num_unktab1;              // 0x58
   uint64_t unktab1_offset;           // 0x5C
   uint32_t unused_2[7];              // 0x64
-  uint32_t page_file_size;           // 0x80
+  uint32_t page_size;                // 0x80
   uint32_t num_page_files;           // 0x84
   uint64_t page_files_offset;        // 0x88
   uint32_t gdex_len;                 // 0x90
@@ -999,7 +999,7 @@ typedef struct bg3_gts_layer_header {
 typedef struct bg3_gts_level_header {
   uint32_t width;
   uint32_t height;
-  uint64_t offset;
+  uint64_t flat_tiles_offset;
 } LIBBG3_PACK bg3_gts_level_header;
 
 typedef struct bg3_gts_parameter_block_header {
@@ -1020,10 +1020,13 @@ typedef struct bg3_gts_thumbnails_entry {
 
 typedef struct bg3_gts_page_files_entry {
   uint16_t name[0x100];  // ?
-  uint32_t unk0;
+  uint32_t num_pages;
   bg3_uuid file_uuid;
   uint32_t unk1;
 } LIBBG3_PACK bg3_gts_page_files_entry;
+
+typedef struct bg3_gts_flat_tiles_entry {
+} LIBBG3_PACK bg3_gts_flat_tiles_entry;
 
 typedef enum bg3_gdex_tag : uint32_t {
   bg3_gdex_tag_meta = LIBBG3_MAKE_FOURCC('M', 'E', 'T', 'A'),
@@ -1152,6 +1155,12 @@ typedef enum bg3_gts_texture_channel_transform : uint32_t {
   bg3_gts_texture_channel_transform_ufloat = 5,
   bg3_gts_texture_channel_transform_srgb = 6,
 } bg3_gts_texture_channel_transform;
+
+typedef enum bg3_gts_texture_addressing_mode : uint32_t {
+  bg3_gts_texture_addressing_mode_none = 0,
+  bg3_gts_texture_addressing_mode_repeat = 1,
+  bg3_gts_texture_addressing_mode_clamp = 2,
+} bg3_gts_texture_addressing_mode;
 
 typedef enum bg3_gts_layer_data_type : uint32_t {
   bg3_gts_layer_dt_r8g8b8_srgb = 0,
@@ -4174,6 +4183,25 @@ void* bg3_granny_reader_get_root(bg3_granny_reader* reader) {
   return root;
 }
 
+static size_t bg3__ucs16_strlen(uint16_t* u16str) {
+  size_t len = 0;
+  while (*u16str++) {
+    len++;
+  }
+  return len;
+}
+
+static void bg3__buffer_push_ucs16_as_ascii(bg3_buffer* buf, uint16_t* u16str) {
+  size_t len = bg3__ucs16_strlen(u16str) + 1;
+  for (size_t i = 0; i < len; ++i) {
+    uint16_t c = u16str[i];
+    if (c < 0x80) {
+      bg3_buffer_push(buf, &c, 1);
+    }
+  }
+  buf->size--;
+}
+
 bg3_status bg3_gts_reader_init(bg3_gts_reader* reader, char* data, size_t data_len) {
   memset(reader, 0, sizeof(bg3_gts_reader));
   reader->data = data;
@@ -4203,11 +4231,30 @@ static void bg3__gdex_dump(bg3_indent_buffer* ibuf,
                            char const* items_end) {
   while (items < items_end) {
     bg3_gdex_item const* item = (bg3_gdex_item const*)items;
-    bg3_ibuf_printf(ibuf, "[" LIBBG3_FOURCC_FMT "]: %08zX %d %d %08X 0x%08X len: %lld\n",
+    bg3_ibuf_printf(ibuf, "[" LIBBG3_FOURCC_FMT "]: %08zX %d %d %08X 0x%08X len: %lld ",
                     LIBBG3_FOURCC_FMT_ARGS(item->tag), items - base, (int)item->type,
                     (int)item->flag, (int)item->length_lo,
                     item->flag & 1 ? bg3_gdex_item_extended_length(item) : 0,
                     bg3_gdex_item_length(item));
+    switch (item->type) {
+      case bg3_gdex_item_string: {
+        bg3_buffer buf = {};
+        bg3__buffer_push_ucs16_as_ascii(&buf, (uint16_t*)bg3_gdex_item_payload(item));
+        bg3_ibuf_printf(ibuf, "%s", buf.data);
+        bg3_buffer_destroy(&buf);
+        break;
+      }
+      case bg3_gdex_item_int: {
+        uint32_t val;
+        LIBBG3_CHECK(bg3_gdex_item_payload_length(item) == sizeof(uint32_t), "bad size");
+        memcpy(&val, bg3_gdex_item_payload(item), sizeof(uint32_t));
+        bg3_ibuf_printf(ibuf, "%d", val);
+        break;
+      }
+      default:
+        break;
+    }
+    bg3_ibuf_fresh_line(ibuf);
     bg3_ibuf_push(ibuf, 4);
     if (item->type == bg3_gdex_item_container) {
       bg3__gdex_dump(ibuf, base, items + bg3_gdex_item_header_length(item),
@@ -4230,27 +4277,6 @@ bg3_gdex_item const* bg3_gdex_item_find_child(bg3_gdex_item const* parent, uint3
   return 0;
 }
 
-static size_t bg3__ucs16_strlen(uint16_t* u16str) {
-  size_t len = 0;
-  while (*u16str++) {
-    len++;
-  }
-  return len;
-}
-
-static void bg3__buffer_push_ucs16_as_ascii(bg3_buffer* buf, uint16_t* u16str) {
-  size_t len = bg3__ucs16_strlen(u16str) + 1;
-  for (size_t i = 0; i < len; ++i) {
-    uint16_t c = u16str[i];
-    if (c < 0x80) {
-      bg3_buffer_push(buf, &c, 1);
-    } else {
-      bg3_panic("non-ascii character in string");
-    }
-  }
-  buf->size--;
-}
-
 void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("GTS version %d header %zu\n", reader->header.version, sizeof(reader->header));
   if (reader->header.thumbnails_offset) {
@@ -4271,8 +4297,8 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   }
   printf("layers %d\n", reader->header.num_layers);
   printf("mip levels %d\n", reader->header.num_levels);
-  printf("tile width %d tile height %d\n", reader->header.tile_height,
-         reader->header.tile_width);
+  printf("tile width %d height %d border %d\n", reader->header.tile_width,
+         reader->header.tile_height, reader->header.tile_border);
   printf("num param blocks %d\n", reader->header.num_parameter_blocks);
   printf("gdex offset (offset %zd) %016llX len %08X\n",
          offsetof(bg3_gts_header, gdex_offset), reader->header.gdex_offset,
@@ -4304,9 +4330,10 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
        ++i, offset += sizeof(bg3_gts_level_header)) {
     bg3_gts_level_header header;
     memcpy(&header, reader->data + offset, sizeof(bg3_gts_level_header));
-    printf("level %zd: %d %d %016llX\n", i, header.width, header.height, header.offset);
+    printf("level %zd: %d %d %016llX\n", i, header.width, header.height,
+           header.flat_tiles_offset);
     uint32_t level_size = header.width * header.height * reader->header.num_layers * 4;
-    uint32_t* level_data = (uint32_t*)(reader->data + header.offset);
+    uint32_t* level_data = (uint32_t*)(reader->data + header.flat_tiles_offset);
     for (uint32_t y = 0; y < header.height; ++y) {
       for (uint32_t x = 0; x < header.width; ++x) {
         printf("[");
@@ -4343,17 +4370,17 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
     printf(
         "page file %zd: %s %08X %08X "
         "uuid=%s\n",
-        i, tmpbuf.data, entry.unk0, entry.unk1, uuidbuf);
+        i, tmpbuf.data, entry.num_pages, entry.unk1, uuidbuf);
   }
   bg3_uuid_to_string(&reader->header.file_uuid, uuidbuf);
   printf("unknowns: %08X %s %08X %08X tab0=%d,%016llX tab1=%d,%016llX \n",
          reader->header.unk_used_a, uuidbuf, reader->header.tile_border,
-         reader->header.page_file_size, reader->header.num_unktab0,
-         reader->header.unktab0_offset, reader->header.num_unktab1,
+         reader->header.page_size, reader->header.num_flat_tiles,
+         reader->header.flat_tiles_offset, reader->header.num_unktab1,
          reader->header.unktab1_offset);
   printf("unktab0 dump\n");
-  bg3_hex_dump(reader->data + reader->header.unktab0_offset,
-               reader->header.num_unktab0 * 0xC);
+  bg3_hex_dump(reader->data + reader->header.flat_tiles_offset,
+               reader->header.num_flat_tiles * 0xC);
   printf("unktab1 dump\n");
   bg3_hex_dump(reader->data + reader->header.unktab1_offset,
                reader->header.num_unktab1 * 8);
