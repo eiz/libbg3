@@ -964,15 +964,14 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t magic;                    // 0x0
   uint32_t version;                  // 0x4
   uint32_t unk_used_a;               // 0x8
-  uint64_t unk_used_b;               // 0xC
-  uint64_t unk_used_c;               // 0x14
+  bg3_uuid file_uuid;                // 0xC
   uint32_t num_layers;               // 0x1C
   uint64_t layers_offset;            // 0x20
   uint32_t num_levels;               // 0x28
   uint64_t levels_offset;            // 0x2C
-  uint32_t width;                    // 0x34, guessed order
-  uint32_t height;                   // 0x38
-  uint32_t unk_used_d;               // 0x3C
+  uint32_t tile_width;               // 0x34
+  uint32_t tile_height;              // 0x38
+  uint32_t tile_border;              // 0x3C
   uint32_t unused_0;                 // 0x40
   uint32_t num_unktab0;              // 0x44
   uint64_t unktab0_offset;           // 0x48
@@ -980,7 +979,7 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t num_unktab1;              // 0x58
   uint64_t unktab1_offset;           // 0x5C
   uint32_t unused_2[7];              // 0x64
-  uint32_t unk_used_e;               // 0x80
+  uint32_t page_file_size;           // 0x80
   uint32_t num_page_files;           // 0x84
   uint64_t page_files_offset;        // 0x88
   uint32_t gdex_len;                 // 0x90
@@ -1009,12 +1008,6 @@ typedef struct bg3_gts_parameter_block_header {
   uint64_t data_offset;
 } LIBBG3_PACK bg3_gts_parameter_block_header;
 
-typedef struct bg3_gts_reader {
-  char* data;
-  size_t data_len;
-  bg3_gts_header header;
-} bg3_gts_reader;
-
 typedef struct bg3_gts_thumbnails_entry {
   bg3_uuid uuid;
   uint64_t offset;  // offset for both of the following, which are contiguous
@@ -1028,9 +1021,15 @@ typedef struct bg3_gts_thumbnails_entry {
 typedef struct bg3_gts_page_files_entry {
   uint16_t name[0x100];  // ?
   uint32_t unk0;
-  uint8_t file_hash[16];
+  bg3_uuid file_uuid;
   uint32_t unk1;
 } LIBBG3_PACK bg3_gts_page_files_entry;
+
+typedef struct bg3_gts_reader {
+  char* data;
+  size_t data_len;
+  bg3_gts_header header;
+} bg3_gts_reader;
 
 bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
                                           char* data,
@@ -1138,6 +1137,53 @@ static inline bg3_gdex_item* bg3_gdex_iter_next(bg3_gdex_iter* iter) {
   iter->c.ptr += bg3_gdex_item_length(item);
   return item;
 }
+
+typedef enum bg3_gts_texture_format : uint32_t {
+  bg3_gts_texture_r8g8b8a8 = 0,
+  bg3_gts_texture_r16g16b16a16 = 1,
+  bg3_gts_texture_r32g32b32a32 = 2,
+  bg3_gts_texture_bc1 = 3,
+  bg3_gts_texture_bc3 = 4,
+  bg3_gts_texture_bc5 = 5,
+  bg3_gts_texture_bc7 = 6,
+  bg3_gts_texture_bc6 = 7,
+  bg3_gts_texture_bc4 = 8,
+  bg3_gts_texture_astc4x4 = 9,
+  bg3_gts_texture_astc8x8 = 10,
+  bg3_gts_texture_r32 = 11,
+  bg3_gts_texture_r32g32 = 12,
+  bg3_gts_texture_r32g32b32 = 13,
+} bg3_gts_texture_format;
+
+typedef enum bg3_gts_layer_data_type : uint32_t {
+  bg3_gts_layer_dt_r8g8b8_srgb = 0,
+  bg3_gts_layer_dt_r8g8b8a8_srgb = 1,
+  bg3_gts_layer_dt_x8y8z0_tangent = 2,
+  bg3_gts_layer_dt_r8g8b8_linear = 3,
+  bg3_gts_layer_dt_r8g8b8a8_linear = 4,
+  bg3_gts_layer_dt_x8 = 5,
+  bg3_gts_layer_dt_x8y8 = 6,
+  bg3_gts_layer_dt_x8y8z8 = 7,
+  bg3_gts_layer_dt_x8y8z8w8 = 8,
+  bg3_gts_layer_dt_x16 = 9,
+  bg3_gts_layer_dt_x16y16 = 10,
+  bg3_gts_layer_dt_x16y16z16 = 11,
+  bg3_gts_layer_dt_x16y16z16w16 = 12,
+  bg3_gts_layer_dt_x32 = 13,
+  bg3_gts_layer_dt_x32_float = 14,
+  bg3_gts_layer_dt_x32y32 = 15,
+  bg3_gts_layer_dt_x32y32_float = 16,
+  bg3_gts_layer_dt_x32y32z32 = 17,
+  bg3_gts_layer_dt_x32y32z32_float = 18,
+  bg3_gts_layer_dt_r32g32b32 = 19,
+  bg3_gts_layer_dt_r32g32b32_float = 20,
+  bg3_gts_layer_dt_x32y32z32w32 = 21,
+  bg3_gts_layer_dt_x32y32z32w32_float = 22,
+  bg3_gts_layer_dt_r32g32b32a32 = 23,
+  bg3_gts_layer_dt_r32g32b32a32_float = 24,
+  bg3_gts_layer_dt_r16g16b16_float = 25,
+  bg3_gts_layer_dt_r16g16b16a16_float = 26,
+} bg3_gts_layer_data_type;
 
 // sexp lexer
 
@@ -4199,7 +4245,8 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   }
   printf("layers %d\n", reader->header.num_layers);
   printf("mip levels %d\n", reader->header.num_levels);
-  printf("tile width %d tile height %d\n", reader->header.height, reader->header.width);
+  printf("tile width %d tile height %d\n", reader->header.tile_height,
+         reader->header.tile_width);
   printf("num param blocks %d\n", reader->header.num_parameter_blocks);
   printf("gdex offset (offset %zd) %016llX len %08X\n",
          offsetof(bg3_gts_header, gdex_offset), reader->header.gdex_offset,
@@ -4257,6 +4304,7 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   }
   printf("num page files: %d\n", reader->header.num_page_files);
   bg3_buffer tmpbuf = {};
+  char uuidbuf[48];
   for (size_t i = 0, offset = reader->header.page_files_offset;
        i < reader->header.num_page_files;
        ++i, offset += sizeof(bg3_gts_page_files_entry)) {
@@ -4264,15 +4312,16 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
     bg3_gts_page_files_entry entry;
     memcpy(&entry, reader->data + offset, sizeof(bg3_gts_page_files_entry));
     bg3__buffer_push_ucs16_as_ascii(&tmpbuf, entry.name);
+    bg3_uuid uuidtmp = entry.file_uuid;
+    bg3_uuid_to_string(&uuidtmp, uuidbuf);
     printf(
         "page file %zd: %s %08X %08X "
-        "hash=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-        i, tmpbuf.data, entry.unk0, entry.unk1, entry.file_hash[0], entry.file_hash[1],
-        entry.file_hash[2], entry.file_hash[3], entry.file_hash[4], entry.file_hash[5],
-        entry.file_hash[6], entry.file_hash[7], entry.file_hash[8], entry.file_hash[9],
-        entry.file_hash[10], entry.file_hash[11], entry.file_hash[12],
-        entry.file_hash[13], entry.file_hash[14], entry.file_hash[15]);
+        "uuid=%s\n",
+        i, tmpbuf.data, entry.unk0, entry.unk1, uuidbuf);
   }
+  bg3_uuid_to_string(&reader->header.file_uuid, uuidbuf);
+  printf("unknowns: %08X %s %08X %08X\n", reader->header.unk_used_a, uuidbuf,
+         reader->header.tile_border, reader->header.page_file_size);
   bg3_buffer_destroy(&tmpbuf);
   bg3_ibuf_destroy(&ibuf);
 }
