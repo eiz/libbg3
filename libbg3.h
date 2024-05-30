@@ -976,8 +976,8 @@ typedef struct LIBBG3_PACK bg3_gts_header {
   uint32_t num_flat_tiles;           // 0x44
   uint64_t flat_tiles_offset;        // 0x48
   uint32_t unused_1[2];              // 0x50
-  uint32_t num_unktab1;              // 0x58
-  uint64_t unktab1_offset;           // 0x5C
+  uint32_t num_packed_tiles;         // 0x58
+  uint64_t packed_tiles_offset;      // 0x5C
   uint32_t unused_2[7];              // 0x64
   uint32_t page_size;                // 0x80
   uint32_t num_page_files;           // 0x84
@@ -1026,6 +1026,9 @@ typedef struct bg3_gts_page_files_entry {
 } LIBBG3_PACK bg3_gts_page_files_entry;
 
 typedef struct bg3_gts_flat_tiles_entry {
+  uint16_t unk0[3];
+  uint16_t num_packed_tiles;
+  uint32_t packed_tiles_index;
 } LIBBG3_PACK bg3_gts_flat_tiles_entry;
 
 typedef enum bg3_gdex_tag : uint32_t {
@@ -1068,7 +1071,9 @@ typedef enum bg3_gdex_item_type : uint8_t {
   bg3_gdex_item_float = 3,  // ya rly
   bg3_gdex_item_int64 = 4,
   bg3_gdex_item_double = 6,
-  bg3_gdex_item_date = 7,         // actually just a uint64_t
+  // actually just a uint64_t, also does not actually appear to be used, DATE items are
+  // strings 🤣
+  bg3_gdex_item_date = 7,
   bg3_gdex_item_typed_array = 8,  // they don't write any metadata for these
   bg3_gdex_item_uuid = 12,
   bg3_gdex_item_uuid_array = 13,
@@ -1219,6 +1224,11 @@ bg3_status LIBBG3_API bg3_gts_reader_init(bg3_gts_reader* reader,
                                           size_t data_len);
 void LIBBG3_API bg3_gts_reader_destroy(bg3_gts_reader* reader);
 void LIBBG3_API bg3_gts_reader_dump(bg3_gts_reader* reader);
+
+// granite tile pagefile
+
+#define LIBBG3_GTP_MAGIC   0x50415247  // 'GRAP' in little endian
+#define LIBBG3_GTP_VERSION 4
 
 // sexp lexer
 
@@ -4376,14 +4386,14 @@ void bg3_gts_reader_dump(bg3_gts_reader* reader) {
   printf("unknowns: %08X %s %08X %08X tab0=%d,%016llX tab1=%d,%016llX \n",
          reader->header.unk_used_a, uuidbuf, reader->header.tile_border,
          reader->header.page_size, reader->header.num_flat_tiles,
-         reader->header.flat_tiles_offset, reader->header.num_unktab1,
-         reader->header.unktab1_offset);
-  printf("unktab0 dump\n");
+         reader->header.flat_tiles_offset, reader->header.num_packed_tiles,
+         reader->header.packed_tiles_offset);
+  printf("flat_tiles dump\n");
   bg3_hex_dump(reader->data + reader->header.flat_tiles_offset,
                reader->header.num_flat_tiles * 0xC);
-  printf("unktab1 dump\n");
-  bg3_hex_dump(reader->data + reader->header.unktab1_offset,
-               reader->header.num_unktab1 * 8);
+  printf("packed_tiles dump\n");
+  bg3_hex_dump(reader->data + reader->header.packed_tiles_offset,
+               reader->header.num_packed_tiles * 4);
   bg3_buffer_destroy(&tmpbuf);
   bg3_ibuf_destroy(&ibuf);
 }
